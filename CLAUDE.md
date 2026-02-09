@@ -123,3 +123,32 @@ cargo run -p a2a-rs --example websocket_client_server --features "ws-server,ws-c
 # Reimbursement agent demo (includes web UI at localhost:3000)
 cargo run -p a2a-agents --bin reimbursement_demo
 ```
+
+## Code Generation (ggen + CONSTRUCT)
+
+The project uses ggen for ontology-driven code generation. Domain types are defined as RDF ontology in `ggen/ontology/*.ttl` and generated into Rust via SPARQL CONSTRUCT queries + Tera templates.
+
+### Workflow
+1. Define/update types in RDF ontology (`ggen/ontology/`)
+2. Write SPARQL CONSTRUCT queries in `ggen/ggen.toml`
+3. Templates in `ggen/templates/` transform CONSTRUCT results to Rust
+4. Generated code goes to `a2a-rs/src/generated/`
+5. Hand-written code imports from generated modules
+
+### Key Principle
+- Domain types: CONSTRUCT from ontology (single source of truth)
+- Port traits: CONSTRUCT from ontology
+- Adapter implementations: hand-written (not ontology-derivable)
+- Spec compliance: three-way validation (spec JSON <-> ontology <-> generated Rust)
+
+### Commands
+```bash
+# Generate code from ontology
+ggen generate --config ggen/ggen.toml
+
+# Validate ontology against spec
+/ontology agent
+
+# Run CONSTRUCT-based generation
+/construct
+```
