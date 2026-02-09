@@ -1,11 +1,16 @@
 # Architecture Rules
 
-Hexagonal architecture - never violate layer boundaries:
+Hexagonal architecture - dependency direction is inward only:
 
-- `domain/` - Core types, no external dependencies. Never imports from adapter/application.
-- `port/` - Trait definitions only. Depends on domain, nothing else.
-- `adapter/` - Implementations of ports. Can depend on domain + port + external crates.
-- `application/` - Wiring layer. Connects adapters to ports, handles JSON-RPC routing.
+```
+domain/ <-- port/ <-- adapter/ <-- application/ <-- services/
+```
+
+- `domain/` - Pure types. Zero crate dependencies. Never imports adapter/application/services.
+- `port/` - Async trait definitions. Depends on domain only.
+- `adapter/` - Implements ports. Feature-gated. Can use external crates.
+- `application/` - JSON-RPC routing. Wires adapters to ports.
 - `services/` - High-level client/server wrappers.
 
-New features must define a port trait before writing an adapter implementation.
+Every new feature: port trait first, then adapter implementation.
+Layer violations are blocked by the `enforce-layers.sh` PreToolUse hook.

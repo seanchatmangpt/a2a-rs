@@ -1,38 +1,34 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cargo build *)",
-      "Bash(cargo test *)",
-      "Bash(cargo clippy *)",
-      "Bash(cargo fmt *)",
-      "Bash(cargo doc *)",
-      "Bash(cargo run *)",
-      "Bash(cargo check *)",
-      "Bash(cargo bench *)",
+      "Bash(cargo *)",
       "Bash(git status *)",
       "Bash(git diff *)",
       "Bash(git log *)",
       "Bash(git branch *)",
       "Bash(git show *)",
+      "Bash(git stash *)",
       "Bash(gh pr *)",
-      "Bash(gh issue *)"
+      "Bash(gh issue *)",
+      "Bash(jq *)",
+      "Bash(wc *)"
     ],
     "deny": [
       "Bash(cargo publish *)",
       "Read(.env*)",
       "Read(*.pem)",
-      "Read(*credentials*)"
+      "Read(*credentials*)",
+      "Read(*secret*)"
     ]
   },
   "hooks": {
-    "PostToolUse": [
+    "SessionStart": [
       {
-        "matcher": "Write|Edit",
+        "matcher": "startup",
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/auto-fmt.sh",
-            "timeout": 30
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-init.sh"
           }
         ]
       }
@@ -43,7 +39,42 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-dangerous.sh"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-bash.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/enforce-layers.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-edit.sh",
+            "async": true,
+            "timeout": 120,
+            "statusMessage": "Checking compilation..."
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "Verify this task is complete. Read the changed files (use git diff). Check: 1) No unwrap()/expect() in library code 2) Public types have Serialize/Deserialize derives 3) cargo check passes. Context: $ARGUMENTS",
+            "model": "haiku",
+            "timeout": 90
           }
         ]
       }
@@ -53,7 +84,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Check if Claude completed all requested tasks. Context: $ARGUMENTS. If code was written, verify tests were considered. Respond {\"ok\": true} if done, {\"ok\": false, \"reason\": \"what's missing\"} if not.",
+            "prompt": "Check stop_hook_active in context - if true, respond {\"ok\": true}. Otherwise: 1) Was every user request addressed? 2) If .rs files were written, was cargo check/test run? Respond {\"ok\": true} or {\"ok\": false, \"reason\": \"...\"}. Context: $ARGUMENTS",
             "timeout": 15
           }
         ]
