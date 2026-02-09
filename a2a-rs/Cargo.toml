@@ -22,6 +22,11 @@ base64 = "0.21"
 url = { version = "2.4", features = ["serde"] }
 bon = "2.3"
 
+# Cryptography - optional
+sha2 = { version = "0.10", optional = true }
+hex = { version = "0.4", optional = true }
+ed25519-dalek = { version = "2.1", features = ["serde"], optional = true }
+
 # Database - optional
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "chrono", "uuid", "json"], optional = true }
 
@@ -55,6 +60,7 @@ proptest-derive = "0.5"
 jsonschema = "0.22"
 criterion = { version = "0.5", features = ["html_reports"] }
 arbitrary = { version = "1.3", features = ["derive"] }
+rand = "0.8"
 
 [features]
 default = ["server", "tracing"]
@@ -70,7 +76,9 @@ sqlx-storage = ["server", "dep:sqlx"]
 sqlite = ["sqlx-storage", "sqlx/sqlite"]
 postgres = ["sqlx-storage", "sqlx/postgres"]
 mysql = ["sqlx-storage", "sqlx/mysql"]
-full = ["http-client", "ws-client", "http-server", "ws-server", "tracing", "auth", "sqlite", "postgres"]
+receipts = ["dep:sha2", "dep:hex"]
+receipts-signing = ["receipts", "dep:ed25519-dalek"]
+full = ["http-client", "ws-client", "http-server", "ws-server", "tracing", "auth", "sqlite", "postgres", "receipts-signing"]
 
 
 [[example]]
@@ -92,6 +100,11 @@ required-features = ["sqlx-storage", "tracing"]
 name = "storage_comparison"
 path = "examples/storage_comparison.rs"
 required-features = ["server", "tracing"]
+
+[[example]]
+name = "receipts_demo"
+path = "examples/receipts_demo.rs"
+required-features = ["receipts"]
 
 [[bench]]
 name = "a2a_performance"

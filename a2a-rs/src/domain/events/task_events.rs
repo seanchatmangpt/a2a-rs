@@ -5,6 +5,7 @@ use crate::domain::core::{message::Artifact, task::TaskStatus};
 
 /// Event for task status updates
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TaskStatusUpdateEvent {
     #[serde(rename = "taskId")]
     pub task_id: String,
@@ -20,6 +21,7 @@ pub struct TaskStatusUpdateEvent {
 
 /// Event for task artifact updates
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TaskArtifactUpdateEvent {
     #[serde(rename = "taskId")]
     pub task_id: String,

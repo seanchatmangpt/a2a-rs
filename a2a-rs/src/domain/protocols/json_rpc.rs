@@ -5,6 +5,7 @@ use crate::domain::error::A2AError;
 
 /// Standard JSON-RPC 2.0 message
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct JSONRPCMessage {
     pub jsonrpc: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -22,6 +23,7 @@ impl Default for JSONRPCMessage {
 
 /// JSON-RPC 2.0 error object
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct JSONRPCError {
     pub code: i32,
     pub message: String,
@@ -67,6 +69,7 @@ impl From<A2AError> for JSONRPCError {
 
 /// JSON-RPC 2.0 request
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct JSONRPCRequest {
     pub jsonrpc: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -100,6 +103,7 @@ impl JSONRPCRequest {
 
 /// JSON-RPC 2.0 response
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct JSONRPCResponse {
     pub jsonrpc: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -134,6 +138,7 @@ impl JSONRPCResponse {
 
 /// JSON-RPC 2.0 notification (request without id)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct JSONRPCNotification {
     pub jsonrpc: String,
     pub method: String,

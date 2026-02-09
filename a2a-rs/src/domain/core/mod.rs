@@ -4,6 +4,9 @@ pub mod agent;
 pub mod message;
 pub mod task;
 
+#[cfg(test)]
+mod tests_deny_unknown_fields;
+
 pub use agent::{
     AgentCapabilities, AgentCard, AgentCardSignature, AgentExtension, AgentInterface,
     AgentProvider, AgentSkill, AuthorizationCodeOAuthFlow, ClientCredentialsOAuthFlow,

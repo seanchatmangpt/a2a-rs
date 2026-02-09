@@ -31,6 +31,7 @@ pub enum TransportProtocol {
 /// };
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AgentInterface {
     /// The URL where this interface is available
     pub url: String,
@@ -56,6 +57,7 @@ pub struct AgentInterface {
 /// };
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AgentExtension {
     /// Unique URI identifying the extension
     pub uri: String,
@@ -76,6 +78,7 @@ pub struct AgentExtension {
 /// the integrity and authenticity of an AgentCard. It follows the JSON Web
 /// Signature (JWS) standard as defined in RFC 7515.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AgentCardSignature {
     /// Base64url-encoded protected JWS header
     pub protected: String,
@@ -91,6 +94,7 @@ pub struct AgentCardSignature {
 /// This structure contains metadata about the organization or entity that provides
 /// the agent service, including contact information and organizational details.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AgentProvider {
     pub organization: String,
     pub url: String,
@@ -150,10 +154,11 @@ pub enum SecurityScheme {
 /// This structure contains optional configurations for different OAuth 2.0 flows
 /// that an agent may support. Each flow type has specific requirements and use cases:
 /// - Authorization Code: Most secure, requires user interaction
-/// - Client Credentials: For server-to-server authentication  
+/// - Client Credentials: For server-to-server authentication
 /// - Implicit: For client-side applications (deprecated in OAuth 2.1)
 /// - Password: For trusted applications with user credentials
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct OAuthFlows {
     #[serde(skip_serializing_if = "Option::is_none", rename = "authorizationCode")]
     pub authorization_code: Option<AuthorizationCodeOAuthFlow>,
@@ -171,6 +176,7 @@ pub struct OAuthFlows {
 /// a two-step process where the user is redirected to authorize the application,
 /// and then an authorization code is exchanged for an access token.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AuthorizationCodeOAuthFlow {
     #[serde(rename = "authorizationUrl")]
     pub authorization_url: String,
@@ -187,6 +193,7 @@ pub struct AuthorizationCodeOAuthFlow {
 /// where no user interaction is required. The client authenticates using
 /// its own credentials to obtain an access token.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ClientCredentialsOAuthFlow {
     #[serde(rename = "tokenUrl")]
     pub token_url: String,
@@ -201,6 +208,7 @@ pub struct ClientCredentialsOAuthFlow {
 /// securely store client secrets. Access tokens are returned directly
 /// from the authorization endpoint. Note: This flow is deprecated in OAuth 2.1.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ImplicitOAuthFlow {
     #[serde(rename = "authorizationUrl")]
     pub authorization_url: String,
@@ -215,6 +223,7 @@ pub struct ImplicitOAuthFlow {
 /// and password for an access token. This flow should only be used by
 /// highly trusted applications as it requires handling user credentials directly.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PasswordOAuthFlow {
     #[serde(rename = "tokenUrl")]
     pub token_url: String,
@@ -231,6 +240,7 @@ pub struct PasswordOAuthFlow {
 /// - `state_transition_history`: Whether the agent maintains task state history
 /// - `extensions`: List of protocol extensions supported by the agent (v0.3.0)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct AgentCapabilities {
     #[serde(default)]
     pub streaming: bool,
@@ -245,6 +255,7 @@ pub struct AgentCapabilities {
 
 /// A skill provided by an agent with metadata and examples.\n///\n/// Skills define specific capabilities that an agent can perform,\n/// including natural language descriptions, categorization tags,\n/// usage examples, and supported input/output modes.\n///\n/// # Example\n/// ```rust\n/// use a2a_rs::AgentSkill;\n/// \n/// let skill = AgentSkill::new(\n///     \"text-generation\".to_string(),\n///     \"Text Generation\".to_string(), \n///     \"Generate natural language text based on prompts\".to_string(),\n///     vec![\"nlp\".to_string(), \"generation\".to_string()]\n/// );\n/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AgentSkill {
     pub id: String,
     pub name: String,
@@ -327,6 +338,7 @@ impl AgentSkill {
 
 /// Card describing an agent's capabilities, metadata, and available skills.\n///\n/// The AgentCard is the primary descriptor for an agent, containing all the\n/// information needed for clients to understand what the agent can do and\n/// how to interact with it. This includes basic metadata like name and version,\n/// capabilities like streaming support, available skills, and security requirements.\n///\n/// # Example\n/// ```rust\n/// use a2a_rs::{AgentCard, AgentCapabilities, AgentSkill};\n/// \n/// let card = AgentCard::builder()\n///     .name(\"My Agent\".to_string())\n///     .description(\"A helpful AI agent\".to_string())\n///     .url(\"https://agent.example.com\".to_string())\n///     .version(\"1.0.0\".to_string())\n///     .capabilities(AgentCapabilities::default())\n///     .build();\n/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
+#[serde(deny_unknown_fields)]
 pub struct AgentCard {
     pub name: String,
     pub description: String,
@@ -395,6 +407,7 @@ fn default_preferred_transport() -> String {
 /// to send push notifications to a client endpoint. This allows
 /// agents to securely deliver notifications to authenticated endpoints.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PushNotificationAuthenticationInfo {
     pub schemes: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -419,6 +432,7 @@ pub struct PushNotificationAuthenticationInfo {
 /// };
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PushNotificationConfig {
     /// Unique identifier for the push notification configuration (v0.3.0)
     /// Allows multiple notification callbacks per task

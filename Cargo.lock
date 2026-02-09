@@ -62,16 +62,20 @@ dependencies = [
  "bon",
  "chrono",
  "criterion",
+ "ed25519-dalek",
  "futures",
+ "hex",
  "jsonschema",
  "jsonwebtoken",
  "oauth2",
  "openidconnect",
  "proptest",
  "proptest-derive",
+ "rand",
  "reqwest 0.11.27",
  "serde",
  "serde_json",
+ "sha2",
  "sqlx",
  "thiserror 1.0.69",
  "tokio",
@@ -1004,6 +1008,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
 dependencies = [
  "pkcs8",
+ "serde",
  "signature",
 ]
 

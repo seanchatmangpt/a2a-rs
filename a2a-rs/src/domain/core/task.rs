@@ -26,7 +26,7 @@ use crate::measure_duration;
 /// - `Rejected`: Task was rejected (invalid, unauthorized, etc.)
 /// - `AuthRequired`: Task requires authentication to proceed
 /// - `Unknown`: Task state could not be determined
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "kebab-case")]
 pub enum TaskState {
     Submitted,
@@ -58,6 +58,7 @@ pub enum TaskState {
 /// };
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TaskStatus {
     pub state: TaskState,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -100,6 +101,7 @@ impl Default for TaskStatus {
 ///     .build();
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
+#[serde(deny_unknown_fields)]
 pub struct Task {
     pub id: String,
     #[serde(rename = "contextId")]
@@ -121,6 +123,7 @@ pub struct Task {
 /// Simple structure containing a task ID and optional metadata
 /// for task identification in API requests.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TaskIdParams {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -132,6 +135,7 @@ pub struct TaskIdParams {
 /// Allows querying a task by ID with optional limits on the amount
 /// of history to return and additional metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TaskQueryParams {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none", rename = "historyLength")]
@@ -148,6 +152,7 @@ pub struct TaskQueryParams {
 /// - `push_notification_config`: Settings for push notifications
 /// - `blocking`: Whether the request should wait for completion
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MessageSendConfiguration {
     /// Output formats the client can handle (v0.3.0: changed to optional)
     #[serde(
@@ -171,6 +176,7 @@ pub struct MessageSendConfiguration {
 /// Contains the message to send along with optional configuration
 /// that controls how the message is processed and delivered.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MessageSendParams {
     pub message: Message,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -181,6 +187,7 @@ pub struct MessageSendParams {
 
 /// Parameters for sending a task (legacy)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TaskSendParams {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none", rename = "sessionId")]
@@ -196,6 +203,7 @@ pub struct TaskSendParams {
 
 /// Configuration for task push notifications
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TaskPushNotificationConfig {
     #[serde(rename = "taskId")]
     pub task_id: String,
@@ -224,6 +232,7 @@ pub struct TaskPushNotificationConfig {
 /// };
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct ListTasksParams {
     /// Filter tasks by context ID
     #[serde(skip_serializing_if = "Option::is_none", rename = "contextId")]
@@ -255,6 +264,7 @@ pub struct ListTasksParams {
 /// Contains the list of tasks matching the query criteria along with
 /// pagination information for retrieving additional results.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ListTasksResult {
     /// Array of tasks matching the criteria
     pub tasks: Vec<Task>,
@@ -274,6 +284,7 @@ pub struct ListTasksResult {
 /// Enhanced version that allows retrieving a specific config by ID,
 /// supporting multiple notification callbacks per task.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GetTaskPushNotificationConfigParams {
     /// Task ID
     pub id: String,
@@ -289,6 +300,7 @@ pub struct GetTaskPushNotificationConfigParams {
 
 /// Parameters for listing all push notification configs for a task (v0.3.0).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ListTaskPushNotificationConfigParams {
     /// Task ID
     pub id: String,
@@ -298,6 +310,7 @@ pub struct ListTaskPushNotificationConfigParams {
 
 /// Parameters for deleting a push notification config (v0.3.0).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DeleteTaskPushNotificationConfigParams {
     /// Task ID
     pub id: String,

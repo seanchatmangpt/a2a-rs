@@ -36,7 +36,7 @@ pub enum Role {
 ///     uri: None,
 /// };
 ///
-/// // URI-based file content  
+/// // URI-based file content
 /// let uri_based = FileContent {
 ///     name: Some("document.pdf".to_string()),
 ///     mime_type: Some("application/pdf".to_string()),
@@ -45,6 +45,7 @@ pub enum Role {
 /// };
 /// ```
 #[derive(Debug, Clone, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct FileContent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -65,6 +66,7 @@ impl<'de> Deserialize<'de> for FileContent {
     {
         // Use a helper struct to deserialize the raw data
         #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
         struct FileContentHelper {
             name: Option<String>,
             #[serde(rename = "mimeType")]
@@ -184,6 +186,7 @@ impl Part {
 ///     .build();
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
+#[serde(deny_unknown_fields)]
 pub struct Message {
     pub role: Role,
     #[builder(default = Vec::new())]
@@ -228,6 +231,7 @@ pub struct Message {
 /// };
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Artifact {
     #[serde(rename = "artifactId")]
     pub artifact_id: String,

@@ -73,6 +73,7 @@
 // Re-export key modules and types
 pub mod adapter;
 pub mod application;
+pub mod construct;
 pub mod domain;
 pub mod port;
 pub mod services;
@@ -98,6 +99,24 @@ pub use port::{
     MessageHandler, NotificationManager, StreamingHandler, StreamingSubscriber, TaskManager,
     UpdateEvent,
 };
+
+// CONSTRUCT framework exports
+pub use construct::{
+    AllGuard, AnyGuard, ArtifactEvent, ArtifactImmutabilityInvariant, ArtifactSnapshot,
+    ArtifactStore, ArtifactStoreError, ContentHash, CoordinationError, CoordinationResult,
+    DependencyEdge, EnumGuard, ErrorEvent, Event, EventError, EventKind, EventOrderingInvariant,
+    EventResult, EventSequence, Guard, InMemoryArtifactStore, Invariant, InvariantRegistry,
+    InvariantResult, InvariantViolation, PriorityClass, RangeGuard, RefusalCode, RefusalReceipt,
+    RequiredFieldGuard, ScheduledTask, Scheduler, SchedulerError, StateTransitionGuard,
+    StoredArtifact, StringLengthGuard, TaskArtifacts, TaskGraph, TaskNode, TaskStateInvariant,
+    TaskStatusEvent, TypeGuard,
+};
+
+#[cfg(feature = "server")]
+pub use construct::EventStream;
+
+#[cfg(feature = "receipts")]
+pub use construct::{Receipt, ReceiptChain, ReceiptError, compute_hash, compute_receipt_hash};
 
 #[cfg(feature = "http-client")]
 pub use adapter::HttpClient;
