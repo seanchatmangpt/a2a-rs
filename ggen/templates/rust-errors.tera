@@ -1,0 +1,207 @@
+---
+# Tera template for generating thiserror error enums from SPARQL CONSTRUCT results.
+#
+# Expects SPARQL CONSTRUCT query results that produce RDF triples describing
+# A2A Protocol and JSON-RPC error codes. Each error resource should have:
+#   - a2a:errorName     (PascalCase variant name, e.g. "TaskNotFound")
+#   - a2a:errorCode     (integer JSON-RPC error code, e.g. -32001)
+#   - a2a:errorMessage  (default human-readable message, e.g. "Task not found")
+#   - rdfs:comment      (documentation string for the variant)
+#   - a2a:hasPayload    (optional boolean; if true the variant wraps a String)
+#
+# SPARQL CONSTRUCT query:
+#   PREFIX a2a:  <https://schemas.google.com/a2a/v0.3.0/>
+#   PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+#   PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+#
+#   CONSTRUCT {
+#     ?error a2a:ErrorDefinition ;
+#            a2a:errorName    ?name ;
+#            a2a:errorCode    ?code ;
+#            a2a:errorMessage ?message ;
+#            rdfs:comment     ?comment ;
+#            a2a:hasPayload   ?hasPayload .
+#   }
+#   WHERE {
+#     ?error a         a2a:ErrorDefinition ;
+#            a2a:errorName    ?name ;
+#            a2a:errorCode    ?code ;
+#            a2a:errorMessage ?message .
+#     OPTIONAL { ?error rdfs:comment   ?comment }
+#     OPTIONAL { ?error a2a:hasPayload ?hasPayload }
+#   }
+#   ORDER BY DESC(?code)
+#
+# Output: A single Rust source file containing the generated error enum.
+output: "src/domain/generated_error.rs"
+---
+//! Auto-generated A2A Protocol error types.
+//!
+//! This file was generated from RDF error definitions via a SPARQL CONSTRUCT
+//! query. Do not edit manually; re-run the code generator instead.
+
+use thiserror::Error;
+
+/// Error codes for standard JSON-RPC errors and A2A-specific errors.
+///
+/// Each constant maps to a well-known error code defined by the JSON-RPC 2.0
+/// specification or the A2A Protocol v0.3.0 specification.
+pub mod codes {
+{% for error in errors %}
+    /// Error code for [`A2AError::{{ error.name }}`].
+    pub const {{ error.name | upper | replace(from="NOTFOUND", to="NOT_FOUND") | replace(from="NOTCANCELABLE", to="NOT_CANCELABLE") | replace(from="NOTSUPPORTED", to="NOT_SUPPORTED") | replace(from="NOTCONFIGURED", to="NOT_CONFIGURED") | replace(from="JSONPARSE", to="JSON_PARSE") | replace(from="INVALIDREQUEST", to="INVALID_REQUEST") | replace(from="METHODNOTFOUND", to="METHOD_NOT_FOUND") | replace(from="INVALIDPARAMS", to="INVALID_PARAMS") | replace(from="INTERNALERROR", to="INTERNAL_ERROR") | replace(from="CONTENTTYPE", to="CONTENT_TYPE") | replace(from="INVALIDAGENTRESPONSE", to="INVALID_AGENT_RESPONSE") | replace(from="PUSHNOTIFICATION", to="PUSH_NOTIFICATION") | replace(from="UNSUPPORTEDOPERATION", to="UNSUPPORTED_OPERATION") | replace(from="AUTHENTICATEDEXTENDEDCARD", to="AUTHENTICATED_EXTENDED_CARD") }}: i32 = {{ error.code }};
+{% endfor %}
+}
+
+/// A2A Protocol error type covering all standard JSON-RPC and A2A-specific
+/// error conditions.
+///
+/// Generated from the A2A Protocol v0.3.0 error definitions. Each variant
+/// corresponds to a well-known error code and carries an optional detail
+/// payload where applicable.
+#[derive(Debug, Error)]
+pub enum A2AError {
+{% for error in errors %}
+{% if error.comment %}
+    /// {{ error.comment }}
+{% else %}
+    /// {{ error.message }}.
+{% endif %}
+{% if error.has_payload %}
+    #[error("{{ error.message }}: {0}")]
+    {{ error.name }}(String),
+{% else %}
+    #[error("{{ error.message }}")]
+    {{ error.name }},
+{% endif %}
+
+{% endfor %}
+}
+
+impl A2AError {
+    /// Returns the JSON-RPC error code associated with this error variant.
+    ///
+    /// Standard JSON-RPC errors use codes in the -32700 to -32600 range.
+    /// A2A-specific errors use codes in the -32001 to -32099 range.
+    pub const fn code(&self) -> i32 {
+        match self {
+{% for error in errors %}
+{% if error.has_payload %}
+            Self::{{ error.name }}(_) => {{ error.code }},
+{% else %}
+            Self::{{ error.name }} => {{ error.code }},
+{% endif %}
+{% endfor %}
+        }
+    }
+
+    /// Returns the default human-readable message for this error variant.
+    ///
+    /// This is the canonical message defined by the specification, independent
+    /// of any runtime detail string carried by the variant.
+    pub const fn default_message(&self) -> &'static str {
+        match self {
+{% for error in errors %}
+{% if error.has_payload %}
+            Self::{{ error.name }}(_) => "{{ error.message }}",
+{% else %}
+            Self::{{ error.name }} => "{{ error.message }}",
+{% endif %}
+{% endfor %}
+        }
+    }
+
+    /// Converts this error into a JSON-RPC error object suitable for
+    /// serialization in a JSON-RPC 2.0 error response.
+    pub fn to_jsonrpc_error(&self) -> serde_json::Value {
+        let detail: Option<String> = match self {
+{% for error in errors %}
+{% if error.has_payload %}
+            Self::{{ error.name }}(msg) => Some(msg.clone()),
+{% else %}
+            Self::{{ error.name }} => None,
+{% endif %}
+{% endfor %}
+        };
+
+        serde_json::json!({
+            "code": self.code(),
+            "message": self.default_message(),
+            "data": detail,
+        })
+    }
+
+    /// Attempts to reconstruct an `A2AError` from a JSON-RPC error code and
+    /// an optional detail string.
+    ///
+    /// Returns `None` if the code does not match any known error.
+    pub fn from_code(code: i32, detail: Option<String>) -> Option<Self> {
+        match code {
+{% for error in errors %}
+{% if error.has_payload %}
+            {{ error.code }} => Some(Self::{{ error.name }}(detail.unwrap_or_default())),
+{% else %}
+            {{ error.code }} => Some(Self::{{ error.name }}),
+{% endif %}
+{% endfor %}
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_variants_have_correct_codes() {
+{% for error in errors %}
+{% if error.has_payload %}
+        assert_eq!(
+            A2AError::{{ error.name }}(String::new()).code(),
+            {{ error.code }},
+            "{{ error.name }} should have code {{ error.code }}"
+        );
+{% else %}
+        assert_eq!(
+            A2AError::{{ error.name }}.code(),
+            {{ error.code }},
+            "{{ error.name }} should have code {{ error.code }}"
+        );
+{% endif %}
+{% endfor %}
+    }
+
+    #[test]
+    fn round_trip_from_code() {
+{% for error in errors %}
+{% if error.has_payload %}
+        let err = A2AError::from_code({{ error.code }}, Some("test".into()));
+        assert!(err.is_some(), "from_code should recognize code {{ error.code }}");
+        assert_eq!(err.unwrap().code(), {{ error.code }});
+{% else %}
+        let err = A2AError::from_code({{ error.code }}, None);
+        assert!(err.is_some(), "from_code should recognize code {{ error.code }}");
+        assert_eq!(err.unwrap().code(), {{ error.code }});
+{% endif %}
+{% endfor %}
+    }
+
+    #[test]
+    fn unknown_code_returns_none() {
+        assert!(A2AError::from_code(99999, None).is_none());
+    }
+
+    #[test]
+    fn jsonrpc_error_has_required_fields() {
+{% for error in errors %}
+{% if error.has_payload %}
+        let val = A2AError::{{ error.name }}("detail".into()).to_jsonrpc_error();
+{% else %}
+        let val = A2AError::{{ error.name }}.to_jsonrpc_error();
+{% endif %}
+        assert!(val.get("code").is_some());
+        assert!(val.get("message").is_some());
+{% endfor %}
+    }
+}

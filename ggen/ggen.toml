@@ -1,0 +1,505 @@
+# ggen.toml - A2A Protocol v0.3.0 Rust code generation manifest
+#
+# Uses SPARQL CONSTRUCT queries to transform the A2A RDF ontology into
+# intermediate RDF graphs, which are then rendered by Tera templates into
+# Rust source code. CONSTRUCT produces derived RDF graphs (not tabular
+# results), enabling graph-to-graph transformation pipelines where each
+# stage can be independently validated and further queried.
+
+# ---------------------------------------------------------------------------
+# Project metadata
+# ---------------------------------------------------------------------------
+
+[project]
+name = "a2a-rs-codegen"
+version = "0.3.0"
+description = "A2A Protocol v0.3.0 Rust code generation from RDF ontology via CONSTRUCT"
+
+# ---------------------------------------------------------------------------
+# Ontology sources
+# ---------------------------------------------------------------------------
+
+[ontology]
+source = "ontology/a2a-agent.ttl"
+additional_sources = [
+    "ontology/a2a-schema.ttl",
+    "ontology/a2a-message.ttl",
+    "ontology/a2a-task.ttl",
+    "ontology/a2a-requests.ttl",
+    "ontology/a2a-events-errors.ttl",
+]
+base_iri = "https://ggen.io/ontology/a2a/"
+
+[ontology.prefixes]
+a2a  = "https://ggen.io/ontology/a2a/"
+rdf  = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+rdfs = "http://www.w3.org/2000/01/rdf-schema#"
+xsd  = "http://www.w3.org/2001/XMLSchema#"
+
+# ---------------------------------------------------------------------------
+# Generation settings
+# ---------------------------------------------------------------------------
+
+[generation]
+output_dir = "../a2a-rs/src/generated/"
+
+# ---------------------------------------------------------------------------
+# Rules
+#
+# Each rule pairs a SPARQL CONSTRUCT query (which builds an intermediate RDF
+# graph from the ontology) with a Tera template that renders Rust source code
+# from that graph. The CONSTRUCT approach is preferred over SELECT because:
+#
+#   1. It produces derived RDF that can be fed into subsequent queries.
+#   2. It transforms the ontology into generation-ready intermediate graphs.
+#   3. It enables composable graph-to-graph transformation pipelines.
+# ---------------------------------------------------------------------------
+
+# ---- 1. Domain Structs ----------------------------------------------------
+# Constructs an intermediate graph of entity names, their fields (with Rust
+# types, optionality, and doc comments) that the template iterates over to
+# emit #[derive(Debug, Clone, Serialize, Deserialize)] structs.
+
+[[rules]]
+name = "domain-structs"
+description = "CONSTRUCT a graph of entity names, their properties, types, and constraints"
+template = "templates/domain_structs.rs.tera"
+output = "domain_structs.rs"
+construct = """
+PREFIX a2a:  <https://ggen.io/ontology/a2a/>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+
+CONSTRUCT {
+    ?entity a a2a:GeneratedStruct ;
+        a2a:structName ?name ;
+        a2a:structDoc ?entityDoc ;
+        a2a:hasField ?prop .
+
+    ?prop a a2a:StructField ;
+        a2a:fieldName ?propName ;
+        a2a:fieldType ?rustType ;
+        a2a:isRequired ?required ;
+        a2a:isOptional ?optional ;
+        a2a:description ?desc ;
+        a2a:hasDefault ?defaultVal ;
+        a2a:serdeRename ?jsonName ;
+        a2a:fieldOrder ?order .
+}
+WHERE {
+    ?entity a a2a:Entity ;
+        a2a:name ?name .
+
+    OPTIONAL { ?entity rdfs:comment ?entityDoc }
+
+    ?entity a2a:hasProperty ?prop .
+    ?prop a2a:name ?propName ;
+        a2a:type ?type .
+
+    # Map XSD / ontology types to Rust types
+    BIND(
+        IF(?type = xsd:string, "String",
+        IF(?type = xsd:boolean, "bool",
+        IF(?type = xsd:integer, "i64",
+        IF(?type = xsd:float, "f64",
+        IF(?type = xsd:dateTime, "chrono::DateTime<chrono::Utc>",
+        IF(?type = a2a:JsonValue, "serde_json::Value",
+        str(?type)))))))
+        AS ?rustType
+    )
+
+    OPTIONAL { ?prop a2a:required ?required }
+    OPTIONAL {
+        ?prop a2a:required ?req .
+        BIND(IF(!?req, true, false) AS ?optional)
+    }
+    OPTIONAL { ?prop rdfs:comment ?desc }
+    OPTIONAL { ?prop a2a:default ?defaultVal }
+    OPTIONAL { ?prop a2a:jsonName ?jsonName }
+    OPTIONAL { ?prop a2a:order ?order }
+
+    # Derive serde rename when JSON name differs from Rust field name
+    BIND(IF(BOUND(?jsonName) && ?jsonName != ?propName, ?jsonName, ?propName) AS ?serdeRename)
+}
+"""
+
+# ---- 2. Domain Enums ------------------------------------------------------
+# Constructs a graph of enum types, their variants, associated payloads, and
+# serde tag/content annotations for internally-tagged union representation.
+
+[[rules]]
+name = "domain-enums"
+description = "CONSTRUCT a graph of enum types and their variants"
+template = "templates/domain_enums.rs.tera"
+output = "domain_enums.rs"
+construct = """
+PREFIX a2a:  <https://ggen.io/ontology/a2a/>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+
+CONSTRUCT {
+    ?enumType a a2a:GeneratedEnum ;
+        a2a:enumName ?name ;
+        a2a:enumDoc ?enumDoc ;
+        a2a:hasVariant ?variant ;
+        a2a:serdeTag ?tagField ;
+        a2a:serdeContent ?contentField .
+
+    ?variant a a2a:EnumVariant ;
+        a2a:variantName ?variantName ;
+        a2a:variantValue ?variantValue ;
+        a2a:variantDoc ?variantDoc ;
+        a2a:variantPayload ?payloadType ;
+        a2a:variantOrder ?variantOrder .
+}
+WHERE {
+    ?enumType a a2a:EnumType ;
+        a2a:name ?name .
+
+    OPTIONAL { ?enumType rdfs:comment ?enumDoc }
+    OPTIONAL { ?enumType a2a:tagField ?tagField }
+    OPTIONAL { ?enumType a2a:contentField ?contentField }
+
+    ?enumType a2a:hasVariant ?variant .
+    ?variant a2a:name ?variantName .
+
+    OPTIONAL { ?variant a2a:value ?variantValue }
+    OPTIONAL { ?variant rdfs:comment ?variantDoc }
+    OPTIONAL { ?variant a2a:payloadType ?payloadType }
+    OPTIONAL { ?variant a2a:order ?variantOrder }
+}
+"""
+
+# ---- 3. Port Traits -------------------------------------------------------
+# Constructs a graph of port interfaces (traits) with their async methods,
+# parameter lists, return types, and documentation. These become the trait
+# definitions in the `port/` layer of the hexagonal architecture.
+
+[[rules]]
+name = "port-traits"
+description = "CONSTRUCT a graph of port interfaces with methods"
+template = "templates/port_traits.rs.tera"
+output = "port_traits.rs"
+construct = """
+PREFIX a2a:  <https://ggen.io/ontology/a2a/>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+
+CONSTRUCT {
+    ?port a a2a:GeneratedTrait ;
+        a2a:traitName ?name ;
+        a2a:traitDoc ?portDoc ;
+        a2a:isAsync ?isAsync ;
+        a2a:requiresSendSync ?sendSync ;
+        a2a:hasMethod ?method .
+
+    ?method a a2a:TraitMethod ;
+        a2a:methodName ?methodName ;
+        a2a:methodDoc ?methodDoc ;
+        a2a:isAsync ?methodAsync ;
+        a2a:returnType ?returnType ;
+        a2a:hasParam ?param ;
+        a2a:methodOrder ?methodOrder .
+
+    ?param a a2a:MethodParam ;
+        a2a:paramName ?paramName ;
+        a2a:paramType ?paramType ;
+        a2a:paramOrder ?paramOrder ;
+        a2a:isBorrowed ?borrowed ;
+        a2a:isMutable ?mutable .
+}
+WHERE {
+    ?port a a2a:Port ;
+        a2a:name ?name .
+
+    OPTIONAL { ?port rdfs:comment ?portDoc }
+    OPTIONAL { ?port a2a:async ?isAsync }
+    OPTIONAL { ?port a2a:sendSync ?sendSync }
+
+    ?port a2a:hasMethod ?method .
+    ?method a2a:name ?methodName .
+
+    OPTIONAL { ?method rdfs:comment ?methodDoc }
+    OPTIONAL { ?method a2a:async ?methodAsync }
+    OPTIONAL { ?method a2a:returnType ?returnType }
+    OPTIONAL { ?method a2a:order ?methodOrder }
+
+    OPTIONAL {
+        ?method a2a:hasParam ?param .
+        ?param a2a:name ?paramName ;
+            a2a:type ?paramType .
+        OPTIONAL { ?param a2a:order ?paramOrder }
+        OPTIONAL { ?param a2a:borrowed ?borrowed }
+        OPTIONAL { ?param a2a:mutable ?mutable }
+    }
+}
+"""
+
+# ---- 4. Error Types --------------------------------------------------------
+# Constructs a graph of error codes, their messages, HTTP status codes, and
+# categorization. Used to generate the thiserror-based error enums.
+
+[[rules]]
+name = "error-types"
+description = "CONSTRUCT a graph of error codes and messages"
+template = "templates/error_types.rs.tera"
+output = "error_types.rs"
+construct = """
+PREFIX a2a:  <https://ggen.io/ontology/a2a/>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+
+CONSTRUCT {
+    ?errorEnum a a2a:GeneratedErrorEnum ;
+        a2a:errorEnumName ?enumName ;
+        a2a:errorEnumDoc ?enumDoc ;
+        a2a:hasErrorCode ?error .
+
+    ?error a a2a:GeneratedErrorCode ;
+        a2a:errorName ?errorName ;
+        a2a:errorCode ?code ;
+        a2a:errorMessage ?message ;
+        a2a:errorDoc ?errorDoc ;
+        a2a:httpStatus ?httpStatus ;
+        a2a:errorCategory ?category ;
+        a2a:isRetryable ?retryable ;
+        a2a:errorData ?dataType .
+}
+WHERE {
+    ?errorEnum a a2a:ErrorEnum ;
+        a2a:name ?enumName .
+
+    OPTIONAL { ?errorEnum rdfs:comment ?enumDoc }
+
+    ?errorEnum a2a:hasError ?error .
+    ?error a2a:name ?errorName ;
+        a2a:code ?code ;
+        a2a:message ?message .
+
+    OPTIONAL { ?error rdfs:comment ?errorDoc }
+    OPTIONAL { ?error a2a:httpStatus ?httpStatus }
+    OPTIONAL { ?error a2a:category ?category }
+    OPTIONAL { ?error a2a:retryable ?retryable }
+    OPTIONAL { ?error a2a:dataType ?dataType }
+}
+"""
+
+# ---- 5. Validation Constraints ---------------------------------------------
+# Constructs a graph of validation rules (min/max length, patterns, ranges,
+# custom predicates) linked to entity fields. Templates generate runtime
+# validation functions that are called from builders.
+
+[[rules]]
+name = "validation"
+description = "CONSTRUCT a graph of validation constraints"
+template = "templates/validation.rs.tera"
+output = "validation.rs"
+construct = """
+PREFIX a2a:  <https://ggen.io/ontology/a2a/>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+
+CONSTRUCT {
+    ?rule a a2a:GeneratedValidation ;
+        a2a:validationTarget ?targetStruct ;
+        a2a:validationField ?fieldName ;
+        a2a:validationType ?kind ;
+        a2a:validationDoc ?ruleDoc .
+
+    ?rule a2a:minLength ?minLen ;
+        a2a:maxLength ?maxLen ;
+        a2a:pattern ?regex ;
+        a2a:minValue ?minVal ;
+        a2a:maxValue ?maxVal ;
+        a2a:enumValues ?allowedValues ;
+        a2a:customValidator ?validatorFn ;
+        a2a:errorMessage ?errMsg .
+}
+WHERE {
+    ?entity a a2a:Entity ;
+        a2a:name ?targetStruct ;
+        a2a:hasProperty ?prop .
+
+    ?prop a2a:name ?fieldName ;
+        a2a:hasConstraint ?constraint .
+
+    ?constraint a2a:kind ?kind .
+
+    BIND(
+        IRI(CONCAT(str(?entity), "_", str(?fieldName), "_validation"))
+        AS ?rule
+    )
+
+    OPTIONAL { ?constraint rdfs:comment ?ruleDoc }
+    OPTIONAL { ?constraint a2a:minLength ?minLen }
+    OPTIONAL { ?constraint a2a:maxLength ?maxLen }
+    OPTIONAL { ?constraint a2a:pattern ?regex }
+    OPTIONAL { ?constraint a2a:minValue ?minVal }
+    OPTIONAL { ?constraint a2a:maxValue ?maxVal }
+    OPTIONAL { ?constraint a2a:enumValues ?allowedValues }
+    OPTIONAL { ?constraint a2a:customValidator ?validatorFn }
+    OPTIONAL { ?constraint a2a:errorMessage ?errMsg }
+}
+"""
+
+# ---- 6. Module File --------------------------------------------------------
+# Constructs a graph of the generated module hierarchy so the template can
+# emit a `mod.rs` that re-exports all generated types with proper visibility.
+
+[[rules]]
+name = "mod-file"
+description = "CONSTRUCT a graph of module structure"
+template = "templates/mod.rs.tera"
+output = "mod.rs"
+construct = """
+PREFIX a2a:  <https://ggen.io/ontology/a2a/>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+
+CONSTRUCT {
+    ?mod a a2a:GeneratedModule ;
+        a2a:moduleName ?modName ;
+        a2a:moduleDoc ?modDoc ;
+        a2a:moduleOrder ?modOrder ;
+        a2a:isPublic ?isPublic ;
+        a2a:exportsType ?exportedType .
+
+    ?exportedType a a2a:ModuleExport ;
+        a2a:exportName ?typeName ;
+        a2a:exportKind ?typeKind ;
+        a2a:sourceRule ?sourceRule .
+}
+WHERE {
+    {
+        # Derive modules from entities
+        ?entity a a2a:Entity ;
+            a2a:name ?typeName ;
+            a2a:module ?modName .
+        BIND(IRI(CONCAT(str(a2a:), "mod_", ?modName)) AS ?mod)
+        BIND(IRI(CONCAT(str(?entity), "_export")) AS ?exportedType)
+        BIND("struct" AS ?typeKind)
+        BIND("domain-structs" AS ?sourceRule)
+        OPTIONAL { ?entity a2a:moduleOrder ?modOrder }
+        OPTIONAL { ?entity a2a:public ?isPublic }
+        OPTIONAL { ?entity a2a:moduleDoc ?modDoc }
+    }
+    UNION
+    {
+        # Derive modules from enums
+        ?enumType a a2a:EnumType ;
+            a2a:name ?typeName ;
+            a2a:module ?modName .
+        BIND(IRI(CONCAT(str(a2a:), "mod_", ?modName)) AS ?mod)
+        BIND(IRI(CONCAT(str(?enumType), "_export")) AS ?exportedType)
+        BIND("enum" AS ?typeKind)
+        BIND("domain-enums" AS ?sourceRule)
+        OPTIONAL { ?enumType a2a:moduleOrder ?modOrder }
+        OPTIONAL { ?enumType a2a:public ?isPublic }
+        OPTIONAL { ?enumType a2a:moduleDoc ?modDoc }
+    }
+    UNION
+    {
+        # Derive modules from ports
+        ?port a a2a:Port ;
+            a2a:name ?typeName ;
+            a2a:module ?modName .
+        BIND(IRI(CONCAT(str(a2a:), "mod_", ?modName)) AS ?mod)
+        BIND(IRI(CONCAT(str(?port), "_export")) AS ?exportedType)
+        BIND("trait" AS ?typeKind)
+        BIND("port-traits" AS ?sourceRule)
+        OPTIONAL { ?port a2a:moduleOrder ?modOrder }
+        OPTIONAL { ?port a2a:public ?isPublic }
+        OPTIONAL { ?port a2a:moduleDoc ?modDoc }
+    }
+}
+"""
+
+# ---- 7. JSON-RPC Types ----------------------------------------------------
+# Constructs a graph of JSON-RPC method definitions with their request
+# parameter types and response result types, including the method string
+# constants and serde tag configuration for the protocol dispatcher.
+
+[[rules]]
+name = "jsonrpc-types"
+description = "CONSTRUCT a graph of JSON-RPC request/response types"
+template = "templates/jsonrpc_types.rs.tera"
+output = "jsonrpc_types.rs"
+construct = """
+PREFIX a2a:  <https://ggen.io/ontology/a2a/>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+
+CONSTRUCT {
+    ?rpcMethod a a2a:GeneratedJsonRpcMethod ;
+        a2a:rpcMethodString ?methodStr ;
+        a2a:rpcMethodName ?methodName ;
+        a2a:rpcMethodDoc ?methodDoc ;
+        a2a:rpcDirection ?direction ;
+        a2a:hasRequestType ?reqType ;
+        a2a:hasResponseType ?resType ;
+        a2a:isNotification ?isNotif ;
+        a2a:isStreaming ?isStream .
+
+    ?reqType a a2a:GeneratedRequestParams ;
+        a2a:requestTypeName ?reqTypeName ;
+        a2a:hasField ?reqField .
+
+    ?reqField a a2a:RequestField ;
+        a2a:fieldName ?reqFieldName ;
+        a2a:fieldType ?reqFieldType ;
+        a2a:isRequired ?reqFieldRequired ;
+        a2a:description ?reqFieldDesc .
+
+    ?resType a a2a:GeneratedResponseResult ;
+        a2a:responseTypeName ?resTypeName ;
+        a2a:resultType ?resultType ;
+        a2a:isStreamResult ?streamResult .
+}
+WHERE {
+    ?rpcMethod a a2a:JsonRpcMethod ;
+        a2a:methodString ?methodStr ;
+        a2a:name ?methodName .
+
+    OPTIONAL { ?rpcMethod rdfs:comment ?methodDoc }
+    OPTIONAL { ?rpcMethod a2a:direction ?direction }
+    OPTIONAL { ?rpcMethod a2a:notification ?isNotif }
+    OPTIONAL { ?rpcMethod a2a:streaming ?isStream }
+
+    # Request params
+    OPTIONAL {
+        ?rpcMethod a2a:requestType ?reqType .
+        ?reqType a2a:name ?reqTypeName .
+
+        OPTIONAL {
+            ?reqType a2a:hasProperty ?reqField .
+            ?reqField a2a:name ?reqFieldName ;
+                a2a:type ?reqFieldRawType .
+            BIND(
+                IF(?reqFieldRawType = xsd:string, "String",
+                IF(?reqFieldRawType = xsd:boolean, "bool",
+                IF(?reqFieldRawType = xsd:integer, "i64",
+                IF(?reqFieldRawType = a2a:JsonValue, "serde_json::Value",
+                str(?reqFieldRawType)))))
+                AS ?reqFieldType
+            )
+            OPTIONAL { ?reqField a2a:required ?reqFieldRequired }
+            OPTIONAL { ?reqField rdfs:comment ?reqFieldDesc }
+        }
+    }
+
+    # Response result
+    OPTIONAL {
+        ?rpcMethod a2a:responseType ?resType .
+        ?resType a2a:name ?resTypeName .
+        OPTIONAL { ?resType a2a:resultType ?resultType }
+        OPTIONAL { ?resType a2a:streamResult ?streamResult }
+    }
+}
+"""
