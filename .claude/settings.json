@@ -1,0 +1,63 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build *)",
+      "Bash(cargo test *)",
+      "Bash(cargo clippy *)",
+      "Bash(cargo fmt *)",
+      "Bash(cargo doc *)",
+      "Bash(cargo run *)",
+      "Bash(cargo check *)",
+      "Bash(cargo bench *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git branch *)",
+      "Bash(git show *)",
+      "Bash(gh pr *)",
+      "Bash(gh issue *)"
+    ],
+    "deny": [
+      "Bash(cargo publish *)",
+      "Read(.env*)",
+      "Read(*.pem)",
+      "Read(*credentials*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/auto-fmt.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-dangerous.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Check if Claude completed all requested tasks. Context: $ARGUMENTS. If code was written, verify tests were considered. Respond {\"ok\": true} if done, {\"ok\": false, \"reason\": \"what's missing\"} if not.",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
