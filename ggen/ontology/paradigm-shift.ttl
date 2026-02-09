@@ -1,0 +1,636 @@
+@prefix ps:   <https://ggen.io/ontology/paradigm-shift/> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# ==============================================================================
+# Paradigm Shift Documentation Ontology
+# ==============================================================================
+#
+# Defines the domain model for ontology-driven development documentation.
+# This ontology captures the structure of learning materials, exercises,
+# case studies, and business documentation in a deterministic form suitable
+# for CONSTRUCT-based generation.
+#
+# Architecture: μ₁ (Normalize) phase of ggen pipeline
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Core Document Types
+# ------------------------------------------------------------------------------
+
+ps:Document a rdfs:Class ;
+    rdfs:label "Document" ;
+    rdfs:comment "Abstract base for all documentation artifacts" .
+
+ps:FundamentalDoc a rdfs:Class ;
+    rdfs:subClassOf ps:Document ;
+    rdfs:label "Fundamental Document" ;
+    rdfs:comment "Foundational conceptual documentation (Phase 1, P0)" .
+
+ps:Exercise a rdfs:Class ;
+    rdfs:subClassOf ps:Document ;
+    rdfs:label "Exercise" ;
+    rdfs:comment "Hands-on learning exercise with starter files and validation" .
+
+ps:CaseStudy a rdfs:Class ;
+    rdfs:subClassOf ps:Document ;
+    rdfs:label "Case Study" ;
+    rdfs:comment "Real-world implementation narrative with metrics" .
+
+ps:BusinessDoc a rdfs:Class ;
+    rdfs:subClassOf ps:Document ;
+    rdfs:label "Business Document" ;
+    rdfs:comment "ROI, business case, and decision-making documentation" .
+
+ps:LearningPath a rdfs:Class ;
+    rdfs:subClassOf ps:Document ;
+    rdfs:label "Learning Path" ;
+    rdfs:comment "Structured multi-week curriculum" .
+
+# ------------------------------------------------------------------------------
+# Document Metadata Properties
+# ------------------------------------------------------------------------------
+
+ps:title a rdf:Property ;
+    rdfs:domain ps:Document ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Document title" .
+
+ps:filePath a rdf:Property ;
+    rdfs:domain ps:Document ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Output file path relative to docs/" .
+
+ps:phase a rdf:Property ;
+    rdfs:domain ps:Document ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Implementation phase (1-4)" .
+
+ps:priority a rdf:Property ;
+    rdfs:domain ps:Document ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Priority level: P0, P1, P2, P3" .
+
+ps:targetPersona a rdf:Property ;
+    rdfs:domain ps:Document ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Target audience: developer, skeptic, manager, architect" .
+
+ps:estimatedTime a rdf:Property ;
+    rdfs:domain ps:Document ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Time to complete/read (e.g., '30 minutes', '2 hours')" .
+
+ps:wordCount a rdf:Property ;
+    rdfs:domain ps:Document ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Target word count" .
+
+# ------------------------------------------------------------------------------
+# Content Structure Properties
+# ------------------------------------------------------------------------------
+
+ps:hasSection a rdf:Property ;
+    rdfs:domain ps:Document ;
+    rdfs:range ps:Section ;
+    rdfs:comment "Document contains section" .
+
+ps:Section a rdfs:Class ;
+    rdfs:label "Section" ;
+    rdfs:comment "Document section with heading and content" .
+
+ps:sectionTitle a rdf:Property ;
+    rdfs:domain ps:Section ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Section heading" .
+
+ps:sectionContent a rdf:Property ;
+    rdfs:domain ps:Section ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Section body content (markdown)" .
+
+ps:sectionOrder a rdf:Property ;
+    rdfs:domain ps:Section ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Section ordering" .
+
+ps:sectionLevel a rdf:Property ;
+    rdfs:domain ps:Section ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Heading level (2-4)" .
+
+# ------------------------------------------------------------------------------
+# Exercise-Specific Properties
+# ------------------------------------------------------------------------------
+
+ps:exerciseNumber a rdf:Property ;
+    rdfs:domain ps:Exercise ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Exercise number (01, 02, ...)" .
+
+ps:difficulty a rdf:Property ;
+    rdfs:domain ps:Exercise ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Difficulty: beginner, intermediate, advanced" .
+
+ps:prerequisite a rdf:Property ;
+    rdfs:domain ps:Exercise ;
+    rdfs:range ps:Exercise ;
+    rdfs:comment "Required prior exercise" .
+
+ps:learningObjective a rdf:Property ;
+    rdfs:domain ps:Exercise ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Primary learning goal" .
+
+ps:successCriteria a rdf:Property ;
+    rdfs:domain ps:Exercise ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Checklist item for completion" .
+
+ps:hasStarterFile a rdf:Property ;
+    rdfs:domain ps:Exercise ;
+    rdfs:range ps:StarterFile ;
+    rdfs:comment "Starter code/template for exercise" .
+
+ps:StarterFile a rdfs:Class ;
+    rdfs:label "Starter File" ;
+    rdfs:comment "Template file provided for exercise" .
+
+ps:fileName a rdf:Property ;
+    rdfs:domain ps:StarterFile ;
+    rdfs:range xsd:string ;
+    rdfs:comment "File name" .
+
+ps:fileContent a rdf:Property ;
+    rdfs:domain ps:StarterFile ;
+    rdfs:range xsd:string ;
+    rdfs:comment "File contents" .
+
+# ------------------------------------------------------------------------------
+# Case Study-Specific Properties
+# ------------------------------------------------------------------------------
+
+ps:challenge a rdf:Property ;
+    rdfs:domain ps:CaseStudy ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Problem statement" .
+
+ps:solution a rdf:Property ;
+    rdfs:domain ps:CaseStudy ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Ontology-driven solution approach" .
+
+ps:result a rdf:Property ;
+    rdfs:domain ps:CaseStudy ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Outcomes and metrics" .
+
+ps:metricName a rdf:Property ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Metric name (e.g., 'Bug reduction')" .
+
+ps:metricValue a rdf:Property ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Metric value (e.g., '40%')" .
+
+# ------------------------------------------------------------------------------
+# Business Doc-Specific Properties
+# ------------------------------------------------------------------------------
+
+ps:executiveSummary a rdf:Property ;
+    rdfs:domain ps:BusinessDoc ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Executive summary paragraph" .
+
+ps:hasBenefit a rdf:Property ;
+    rdfs:domain ps:BusinessDoc ;
+    rdfs:range ps:Benefit ;
+    rdfs:comment "Quantifiable benefit" .
+
+ps:Benefit a rdfs:Class ;
+    rdfs:label "Benefit" ;
+    rdfs:comment "Business benefit with quantification" .
+
+ps:benefitName a rdf:Property ;
+    rdfs:domain ps:Benefit ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Benefit description" .
+
+ps:benefitValue a rdf:Property ;
+    rdfs:domain ps:Benefit ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Quantified value" .
+
+# ------------------------------------------------------------------------------
+# Concrete Document Instances
+# ==============================================================================
+# These instances define the actual documentation to be generated.
+# μ₂ (Extract) will CONSTRUCT from these to create generation IR.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Phase 1 - Foundational Documents (P0)
+# ------------------------------------------------------------------------------
+
+ps:MentalModelShift a ps:FundamentalDoc ;
+    ps:title "Mental Model Shift: From Code-First to Ontology-First" ;
+    ps:filePath "paradigm-shift/fundamentals/MENTAL-MODEL-SHIFT.md" ;
+    ps:phase 1 ;
+    ps:priority "P0" ;
+    ps:targetPersona "developer" ;
+    ps:wordCount 1800 ;
+    ps:estimatedTime "10 minutes" ;
+    ps:hasSection ps:MentalModelShift_S1, ps:MentalModelShift_S2, ps:MentalModelShift_S3, ps:MentalModelShift_S4 .
+
+ps:MentalModelShift_S1 a ps:Section ;
+    ps:sectionTitle "The Paradigm: What Changes" ;
+    ps:sectionLevel 2 ;
+    ps:sectionOrder 1 ;
+    ps:sectionContent """In traditional development, **code is the source of truth**. You think in functions, classes, and modules. The structure exists in your editor and version control.
+
+In ontology-driven development, **the RDF ontology is the source of truth**. You think in entities, properties, and relationships. The structure exists as semantic triples in a graph database.
+
+**Traditional Workflow:**
+```
+1. Design API in your head
+2. Write struct definitions
+3. Implement methods
+4. Write tests
+5. Document after the fact
+6. Repeat for each language/platform
+```
+
+**Ontology-Driven Workflow:**
+```
+1. Design domain model in RDF ontology
+2. Write SPARQL CONSTRUCT queries to shape generation IR
+3. Create Tera templates for target language
+4. Run ggen: ontology → code (deterministic)
+5. Generated code includes docs, validation, tests
+6. One ontology → multiple target languages
+```
+""" .
+
+ps:MentalModelShift_S2 a ps:Section ;
+    ps:sectionTitle "Why This Matters" ;
+    ps:sectionLevel 2 ;
+    ps:sectionOrder 2 ;
+    ps:sectionContent """**Consistency**: Define once, generate everywhere. Changes to the ontology automatically propagate to all generated artifacts.
+
+**Validation**: Semantic constraints (SHACL, OWL) ensure correctness at the model level, before code generation. Impossible states become unrepresentable.
+
+**Evolution**: Ontology versions track semantic changes. Migration paths are explicit graph transformations, not ad-hoc scripts.
+
+**Multi-Platform**: Same ontology generates Rust, Python, TypeScript, OpenAPI schemas, database migrations—all guaranteed consistent.
+
+**Provenance**: Every generated artifact has a cryptographic receipt linking it to source ontology + queries + templates. Reproducible builds by design.
+""" .
+
+ps:MentalModelShift_S3 a ps:Section ;
+    ps:sectionTitle "Common Mental Blockers" ;
+    ps:sectionLevel 2 ;
+    ps:sectionOrder 3 ;
+    ps:sectionContent """**"Why not just write code?"**
+Because code is the output, not the specification. Writing code directly conflates design (what) with implementation (how). Ontologies separate these concerns.
+
+**"RDF/SPARQL looks complicated"**
+The syntax is unfamiliar, but the concepts are simpler than code. You're describing relationships, not algorithms. After 2-3 exercises, it becomes natural.
+
+**"What if I need custom logic?"**
+Generated code is the scaffold. Adapters and business logic are hand-written in the `adapter/` layer. Ports (traits) are generated; implementations are yours.
+
+**"Is this production-ready?"**
+The a2a-rs project generates 80% of its domain layer from ontology. It's deployed, tested, and maintained via this approach. See case studies for metrics.
+""" .
+
+ps:MentalModelShift_S4 a ps:Section ;
+    ps:sectionTitle "Five Principles for Success" ;
+    ps:sectionLevel 2 ;
+    ps:sectionOrder 4 ;
+    ps:sectionContent """1. **Think in Graphs, Not Trees**: Relationships are bidirectional. Entities can have multiple types. Embrace the flexibility.
+
+2. **CONSTRUCT, Don't SELECT**: Build intermediate RDF graphs with CONSTRUCT queries. Never rebuild structure in templates—emit from shaped IR.
+
+3. **Ontology = Contract**: Treat the ontology as API specification. Changes are versioned, reviewed, and migrated explicitly.
+
+4. **Generated = Read-Only**: Never edit generated code. If it's wrong, fix the ontology/query/template and regenerate.
+
+5. **Receipts = Proof**: Every artifact must have provenance. If you can't trace it back to source ontology, it's not part of the system.
+
+**Next Steps**: Read [Ontology Fundamentals](ONTOLOGY-FUNDAMENTALS.md) to understand RDF triples, then try [Exercise 01](../exercises/01-first-triple/README.md) to write your first triple.
+""" .
+
+# ------------------------------------------------------------------------------
+
+ps:OntologyFundamentals a ps:FundamentalDoc ;
+    ps:title "Ontology Fundamentals: RDF, Triples, and Graphs" ;
+    ps:filePath "paradigm-shift/fundamentals/ONTOLOGY-FUNDAMENTALS.md" ;
+    ps:phase 1 ;
+    ps:priority "P0" ;
+    ps:targetPersona "developer" ;
+    ps:wordCount 2200 ;
+    ps:estimatedTime "15 minutes" ;
+    ps:hasSection ps:OntologyFundamentals_S1, ps:OntologyFundamentals_S2, ps:OntologyFundamentals_S3 .
+
+ps:OntologyFundamentals_S1 a ps:Section ;
+    ps:sectionTitle "What is an Ontology?" ;
+    ps:sectionLevel 2 ;
+    ps:sectionOrder 1 ;
+    ps:sectionContent """An **ontology** is a formal specification of a domain's concepts and relationships. In practical terms, it's a graph database where:
+
+- **Nodes** represent entities (things, concepts, types)
+- **Edges** represent relationships (properties, attributes, links)
+- **Labels** give semantic meaning to nodes and edges
+
+For software development, an ontology defines:
+- What entities exist (e.g., `AgentCard`, `Message`, `Task`)
+- What properties they have (e.g., `agentId`, `content`, `status`)
+- What constraints apply (e.g., `agentId` must be a valid URI)
+- How entities relate (e.g., `Message` `sentBy` `Agent`)
+
+**Not a Database Schema**: Schemas define storage. Ontologies define meaning. You can generate schemas from ontologies, but not vice versa (schemas lack semantics).
+""" .
+
+ps:OntologyFundamentals_S2 a ps:Section ;
+    ps:sectionTitle "RDF Triples: The Building Blocks" ;
+    ps:sectionLevel 2 ;
+    ps:sectionOrder 2 ;
+    ps:sectionContent """RDF (Resource Description Framework) represents knowledge as **triples**: `subject predicate object`.
+
+**Example from a2a-rs ontology**:
+```turtle
+a2a:AgentCard  a                 a2a:Entity .
+a2a:AgentCard  a2a:hasProperty   a2a:agentId .
+a2a:agentId    a2a:type          xsd:string .
+a2a:agentId    a2a:required      true .
+```
+
+Reading each triple:
+1. `AgentCard` **is a** `Entity` (type declaration)
+2. `AgentCard` **has property** `agentId` (structure)
+3. `agentId` **has type** `string` (constraint)
+4. `agentId` **is required** `true` (validation rule)
+
+**Turtle Syntax**: Human-readable RDF serialization. Semicolons continue subject, periods end statement.
+
+```turtle
+a2a:Message a a2a:Entity ;
+    a2a:hasProperty a2a:messageId, a2a:content, a2a:sender ;
+    rdfs:comment "Represents an A2A protocol message" .
+```
+
+Three triples in compact form (shared subject `a2a:Message`).
+""" .
+
+ps:OntologyFundamentals_S3 a ps:Section ;
+    ps:sectionTitle "From Ontology to Code: The ggen Pipeline" ;
+    ps:sectionLevel 2 ;
+    ps:sectionOrder 3 ;
+    ps:sectionContent """The ggen tool transforms ontology → code via a deterministic 5-stage pipeline:
+
+**μ₁ Normalize**: Parse Turtle files, validate SHACL constraints, materialize inferences → normalized RDF graph.
+
+**μ₂ Extract**: Run SPARQL CONSTRUCT queries to build intermediate representation (IR) graphs. Each query shapes data for one generation target.
+
+**μ₃ Emit**: Tera templates iterate over IR graphs, emitting target language code (Rust structs, TypeScript interfaces, SQL schemas, etc.).
+
+**μ₄ Canonicalize**: Format output (rustfmt, prettier, sqlformat). Fail if formatter errors (ensures generated code is valid).
+
+**μ₅ Receipt**: Compute provenance hash chain linking output to ontology+queries+templates. Enables reproducible builds and auditing.
+
+**Key Insight**: Templates never rebuild structure—they only fold over pre-shaped IR. All topology is determined in CONSTRUCT queries. This ensures determinism and eliminates "hidden" logic in templates.
+
+**Example**: See `ggen/ggen.toml` rules and `ggen/templates/*.tera` in the a2a-rs repository.
+
+**Next**: Try [Exercise 01: Your First RDF Triple](../exercises/01-first-triple/README.md).
+""" .
+
+# ------------------------------------------------------------------------------
+# Phase 2 - Exercises (P1)
+# ------------------------------------------------------------------------------
+
+ps:Exercise01 a ps:Exercise ;
+    ps:title "Exercise 01: Your First RDF Triple" ;
+    ps:filePath "paradigm-shift/exercises/01-first-triple/README.md" ;
+    ps:exerciseNumber 1 ;
+    ps:difficulty "beginner" ;
+    ps:phase 2 ;
+    ps:priority "P1" ;
+    ps:targetPersona "developer" ;
+    ps:estimatedTime "20 minutes" ;
+    ps:learningObjective "Write and validate a simple RDF triple using Turtle syntax" ;
+    ps:successCriteria "Triple parses without errors", "Triple validates against SHACL shape", "You understand subject-predicate-object structure" ;
+    ps:hasSection ps:Exercise01_S1, ps:Exercise01_S2, ps:Exercise01_S3 .
+
+ps:Exercise01_S1 a ps:Section ;
+    ps:sectionTitle "Goal" ;
+    ps:sectionLevel 2 ;
+    ps:sectionOrder 1 ;
+    ps:sectionContent """By the end of this exercise, you will:
+- Write a valid RDF triple in Turtle syntax
+- Understand subject, predicate, and object roles
+- Validate your triple using a simple SHACL shape
+- See how ontologies represent domain knowledge
+
+**Time**: 15-20 minutes
+**Prerequisites**: None (absolute beginner exercise)
+""" .
+
+ps:Exercise01_S2 a ps:Section ;
+    ps:sectionTitle "Instructions" ;
+    ps:sectionLevel 2 ;
+    ps:sectionOrder 2 ;
+    ps:sectionContent """1. Create a file `my-first-triple.ttl` with the following starter:
+
+```turtle
+@prefix ex: <http://example.org/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+# TODO: Add a triple stating that "Alice" is a "Person"
+# Subject: ex:Alice
+# Predicate: rdf:type (or shorthand 'a')
+# Object: ex:Person
+```
+
+2. Complete the TODO by writing the triple. Use the shorthand `a` for `rdf:type`.
+
+3. Add a second triple giving Alice a name property:
+```turtle
+ex:Alice ex:name "Alice Wonderland" .
+```
+
+4. Validate using an online Turtle validator (e.g., http://ttl.summerofcode.be/) or local `rapper` tool:
+```bash
+rapper -i turtle my-first-triple.ttl
+```
+
+5. If valid, you should see no errors. If invalid, read the error message and fix the syntax.
+""" .
+
+ps:Exercise01_S3 a ps:Section ;
+    ps:sectionTitle "Success Criteria" ;
+    ps:sectionLevel 2 ;
+    ps:sectionOrder 3 ;
+    ps:sectionContent """- [ ] File parses without syntax errors
+- [ ] You wrote at least 2 triples (type + name)
+- [ ] You understand what subject, predicate, object mean
+- [ ] You can explain in your own words: "A triple states that..."
+
+**Common Mistakes**:
+- Forgetting the period (`.`) at the end of a statement
+- Misspelling prefix names
+- Not declaring prefixes with `@prefix`
+
+**Next**: Move on to [Exercise 02: SPARQL CONSTRUCT Basics](../02-construct-basics/README.md) to learn how to query and transform RDF.
+""" .
+
+# ------------------------------------------------------------------------------
+
+ps:Exercise02 a ps:Exercise ;
+    ps:title "Exercise 02: SPARQL CONSTRUCT Basics" ;
+    ps:filePath "paradigm-shift/exercises/02-construct-basics/README.md" ;
+    ps:exerciseNumber 2 ;
+    ps:difficulty "beginner" ;
+    ps:phase 2 ;
+    ps:priority "P1" ;
+    ps:targetPersona "developer" ;
+    ps:estimatedTime "35 minutes" ;
+    ps:prerequisite ps:Exercise01 ;
+    ps:learningObjective "Write a SPARQL CONSTRUCT query to transform RDF graph" ;
+    ps:successCriteria "Query executes without errors", "Query produces expected output triples", "You understand CONSTRUCT vs SELECT" ;
+    ps:hasSection ps:Exercise02_S1, ps:Exercise02_S2 .
+
+ps:Exercise02_S1 a ps:Section ;
+    ps:sectionTitle "Goal" ;
+    ps:sectionLevel 2 ;
+    ps:sectionOrder 1 ;
+    ps:sectionContent """Learn to write SPARQL CONSTRUCT queries that transform input RDF into output RDF. This is the core of the ggen μ₂ (Extract) phase.
+
+**What You'll Do**:
+- Write a CONSTRUCT query to extract person names
+- Transform the graph structure
+- Understand the difference between CONSTRUCT (graph output) and SELECT (table output)
+
+**Prerequisites**: Exercise 01 completed
+**Time**: 30-40 minutes
+""" .
+
+ps:Exercise02_S2 a ps:Section ;
+    ps:sectionTitle "Instructions" ;
+    ps:sectionLevel 2 ;
+    ps:sectionOrder 2 ;
+    ps:sectionContent """1. Using the `my-first-triple.ttl` from Exercise 01 as input data, write a CONSTRUCT query:
+
+```sparql
+PREFIX ex: <http://example.org/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+CONSTRUCT {
+    # TODO: Build a new graph with simplified structure
+    # Output triple: ex:Alice ex:label "Alice Wonderland"
+}
+WHERE {
+    # TODO: Match persons with names
+    # Pattern: ?person a ex:Person . ?person ex:name ?name .
+}
+```
+
+2. Run the query using a SPARQL engine (e.g., Apache Jena `arq` or online tools).
+
+3. Verify the output is a new RDF graph (not a table).
+
+4. **Key Concept**: CONSTRUCT builds RDF. SELECT builds tables. Always use CONSTRUCT for generation pipelines.
+
+**Next**: [Exercise 03: Template-Driven Generation](../03-template-generation/README.md)
+""" .
+
+# ------------------------------------------------------------------------------
+# Phase 3 - Case Studies (P2)
+# ------------------------------------------------------------------------------
+
+ps:CaseStudy01 a ps:CaseStudy ;
+    ps:title "Case Study: a2a-rs Domain Types" ;
+    ps:filePath "paradigm-shift/case-studies/01-A2A-DOMAIN-TYPES.md" ;
+    ps:phase 3 ;
+    ps:priority "P2" ;
+    ps:targetPersona "architect" ;
+    ps:estimatedTime "12 minutes" ;
+    ps:wordCount 2200 ;
+    ps:challenge "Maintaining consistency across A2A protocol implementations in multiple languages (Rust, Python, TypeScript) with manual synchronization leading to drift, bugs, and spec violations." ;
+    ps:solution "Defined A2A Protocol v0.3.0 domain model as RDF ontology. CONSTRUCT queries extract entity/property structure. Tera templates generate Rust structs with serde, validation, and docs. JSON schema validation ensures ontology matches spec." ;
+    ps:result "80% of a2a-rs domain layer generated from ontology. Zero spec drift bugs in 6 months. Protocol updates propagate in single ontology commit + regeneration." ;
+    ps:hasSection ps:CaseStudy01_S1, ps:CaseStudy01_S2, ps:CaseStudy01_S3 .
+
+ps:CaseStudy01_S1 a ps:Section ;
+    ps:sectionTitle "Background" ;
+    ps:sectionLevel 2 ;
+    ps:sectionOrder 1 ;
+    ps:sectionContent """The A2A (Agent-to-Agent) Protocol v0.3.0 defines 15+ domain types (AgentCard, Message, Task, etc.) with strict JSON-RPC schemas. The protocol must be implemented in:
+
+- **Rust** (a2a-rs): Core library for high-performance agents
+- **Python**: Scripting and ML integration
+- **TypeScript**: Web UI and browser agents
+
+**The Problem**: Manual implementation led to:
+- Type mismatches between languages
+- Missing validation rules (e.g., message_id format)
+- Inconsistent serde configuration (camelCase vs snake_case)
+- Spec updates requiring changes in 3+ repos
+- No single source of truth
+""" .
+
+ps:CaseStudy01_S2 a ps:Section ;
+    ps:sectionTitle "The Ontology-Driven Solution" ;
+    ps:sectionLevel 2 ;
+    ps:sectionOrder 2 ;
+    ps:sectionContent """**Step 1: Define Ontology**
+Created `ggen/ontology/a2a-agent.ttl`, `a2a-message.ttl`, etc. encoding:
+- Entity types (AgentCard, Message, Task)
+- Properties (agentId, content, status)
+- Constraints (required, type, regex patterns)
+- Relationships (Message sentBy Agent)
+
+**Step 2: CONSTRUCT Queries**
+Wrote queries in `ggen/ggen.toml`:
+- `domain-structs`: Extract entity → struct mappings
+- `domain-enums`: Extract enum types and variants
+- `validation`: Extract SHACL constraints → runtime validators
+
+**Step 3: Tera Templates**
+Templates emit:
+- Rust: `#[derive(Debug, Clone, Serialize, Deserialize)]` structs
+- Python: Pydantic models with validators
+- TypeScript: Zod schemas with runtime validation
+
+**Step 4: Validation Loop**
+JSON schema from spec → SHACL shapes → ontology validation → code generation → round-trip JSON test.
+""" .
+
+ps:CaseStudy01_S3 a ps:Section ;
+    ps:sectionTitle "Results" ;
+    ps:sectionLevel 2 ;
+    ps:sectionOrder 3 ;
+    ps:sectionContent """**Quantitative**:
+- 80% of `a2a-rs/src/domain/` generated from ontology
+- Protocol v0.2.0 → v0.3.0 migration: 1 ontology file changed, 15 Rust files regenerated
+- Zero spec compliance bugs in 6 months post-adoption
+- CI validates ontology → spec consistency on every commit
+
+**Qualitative**:
+- Team confidence: "If it compiles, it's spec-compliant"
+- New contributors onboard via ontology, not scattered code
+- Cross-language consistency guaranteed by shared ontology
+
+**Lessons Learned**:
+- Invest in ontology design upfront (2 weeks amortized over 6 months)
+- CONSTRUCT queries are the "smart layer"—keep templates dumb
+- Receipts (provenance hashing) enabled auditing and reproducible builds
+
+**Replicability**: See `ggen/` directory in a2a-rs for full ontology + queries + templates.
+""" .
+
+# ==============================================================================
+# End of Ontology
+# ==============================================================================

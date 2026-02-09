@@ -1,0 +1,241 @@
+# paradigm-shift.toml - Documentation generation manifest
+#
+# Uses SPARQL CONSTRUCT queries to transform the paradigm-shift RDF ontology
+# into markdown documentation via the ggen μ₁-μ₅ pipeline.
+#
+# This demonstrates CCM (Constructive Code Manufacture) for documentation:
+# - μ₁ Normalize: Parse paradigm-shift.ttl, validate SHACL
+# - μ₂ Extract: CONSTRUCT queries build documentation IR graphs
+# - μ₃ Emit: Tera templates fold over IR to emit markdown
+# - μ₄ Canonicalize: Validate markdown structure
+# - μ₅ Receipt: Provenance hash chain
+
+# ---------------------------------------------------------------------------
+# Project metadata
+# ---------------------------------------------------------------------------
+
+[project]
+name = "paradigm-shift-docs"
+version = "1.0.0"
+description = "Ontology-driven documentation generation for paradigm shift learning materials"
+
+# ---------------------------------------------------------------------------
+# Ontology sources
+# ---------------------------------------------------------------------------
+
+[ontology]
+source = "ontology/paradigm-shift.ttl"
+base_iri = "https://ggen.io/ontology/paradigm-shift/"
+
+[ontology.prefixes]
+ps   = "https://ggen.io/ontology/paradigm-shift/"
+rdf  = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+rdfs = "http://www.w3.org/2000/01/rdf-schema#"
+xsd  = "http://www.w3.org/2001/XMLSchema#"
+
+# ---------------------------------------------------------------------------
+# Generation settings
+# ---------------------------------------------------------------------------
+
+[generation]
+output_dir = "../docs/"
+
+# ---------------------------------------------------------------------------
+# Rules
+#
+# Each rule: SPARQL CONSTRUCT → intermediate RDF graph → Tera template → output
+# ---------------------------------------------------------------------------
+
+# ---- 1. Fundamental Documents ----------------------------------------------
+# Constructs a graph of foundational documents with sections, metadata
+
+[[rules]]
+name = "fundamental-docs"
+description = "CONSTRUCT fundamental documentation with sections"
+template = "templates/documentation.md.tera"
+output = "{filePath}"  # Dynamic output path from RDF
+construct = """
+PREFIX ps:   <https://ggen.io/ontology/paradigm-shift/>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+
+CONSTRUCT {
+    ?doc a ps:GeneratedDocument ;
+        ps:outputPath ?path ;
+        ps:docTitle ?title ;
+        ps:docPhase ?phase ;
+        ps:docPriority ?priority ;
+        ps:docPersona ?persona ;
+        ps:docTime ?time ;
+        ps:docWords ?words ;
+        ps:hasSection ?section .
+
+    ?section a ps:GeneratedSection ;
+        ps:sectionTitle ?sectionTitle ;
+        ps:sectionContent ?sectionContent ;
+        ps:sectionLevel ?sectionLevel ;
+        ps:sectionOrder ?sectionOrder .
+}
+WHERE {
+    # Match fundamental documents
+    ?doc a ps:FundamentalDoc ;
+        ps:title ?title ;
+        ps:filePath ?path ;
+        ps:phase ?phase ;
+        ps:priority ?priority ;
+        ps:targetPersona ?persona ;
+        ps:estimatedTime ?time .
+
+    OPTIONAL { ?doc ps:wordCount ?words }
+
+    # Match sections for this document
+    ?doc ps:hasSection ?section .
+    ?section ps:sectionTitle ?sectionTitle ;
+        ps:sectionContent ?sectionContent ;
+        ps:sectionLevel ?sectionLevel ;
+        ps:sectionOrder ?sectionOrder .
+}
+ORDER BY ?path ?sectionOrder
+"""
+
+# ---- 2. Exercises ----------------------------------------------------------
+# Constructs exercise documentation with prerequisites, success criteria, starter files
+
+[[rules]]
+name = "exercises"
+description = "CONSTRUCT exercise documentation with hands-on materials"
+template = "templates/documentation.md.tera"
+output = "{filePath}"
+construct = """
+PREFIX ps:   <https://ggen.io/ontology/paradigm-shift/>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+
+CONSTRUCT {
+    ?doc a ps:GeneratedExercise ;
+        ps:outputPath ?path ;
+        ps:docTitle ?title ;
+        ps:exerciseNum ?num ;
+        ps:difficulty ?difficulty ;
+        ps:docTime ?time ;
+        ps:learningGoal ?objective ;
+        ps:hasSection ?section ;
+        ps:hasSuccessCriteria ?criteria ;
+        ps:prerequisiteExercise ?prereq ;
+        ps:prerequisiteTitle ?prereqTitle .
+
+    ?section a ps:GeneratedSection ;
+        ps:sectionTitle ?sectionTitle ;
+        ps:sectionContent ?sectionContent ;
+        ps:sectionLevel ?sectionLevel ;
+        ps:sectionOrder ?sectionOrder .
+}
+WHERE {
+    # Match exercises
+    ?doc a ps:Exercise ;
+        ps:title ?title ;
+        ps:filePath ?path ;
+        ps:exerciseNumber ?num ;
+        ps:difficulty ?difficulty ;
+        ps:estimatedTime ?time ;
+        ps:learningObjective ?objective .
+
+    # Sections
+    ?doc ps:hasSection ?section .
+    ?section ps:sectionTitle ?sectionTitle ;
+        ps:sectionContent ?sectionContent ;
+        ps:sectionLevel ?sectionLevel ;
+        ps:sectionOrder ?sectionOrder .
+
+    # Success criteria
+    OPTIONAL {
+        ?doc ps:successCriteria ?criteria .
+    }
+
+    # Prerequisites
+    OPTIONAL {
+        ?doc ps:prerequisite ?prereq .
+        ?prereq ps:title ?prereqTitle .
+    }
+}
+ORDER BY ?num ?sectionOrder
+"""
+
+# ---- 3. Case Studies -------------------------------------------------------
+# Constructs case study documentation with challenge/solution/results
+
+[[rules]]
+name = "case-studies"
+description = "CONSTRUCT case study documentation with metrics"
+template = "templates/documentation.md.tera"
+output = "{filePath}"
+construct = """
+PREFIX ps:   <https://ggen.io/ontology/paradigm-shift/>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+
+CONSTRUCT {
+    ?doc a ps:GeneratedCaseStudy ;
+        ps:outputPath ?path ;
+        ps:docTitle ?title ;
+        ps:docPhase ?phase ;
+        ps:docPriority ?priority ;
+        ps:docPersona ?persona ;
+        ps:docTime ?time ;
+        ps:caseChallenge ?challenge ;
+        ps:caseSolution ?solution ;
+        ps:caseResult ?result ;
+        ps:hasSection ?section .
+
+    ?section a ps:GeneratedSection ;
+        ps:sectionTitle ?sectionTitle ;
+        ps:sectionContent ?sectionContent ;
+        ps:sectionLevel ?sectionLevel ;
+        ps:sectionOrder ?sectionOrder .
+}
+WHERE {
+    # Match case studies
+    ?doc a ps:CaseStudy ;
+        ps:title ?title ;
+        ps:filePath ?path ;
+        ps:phase ?phase ;
+        ps:priority ?priority ;
+        ps:targetPersona ?persona ;
+        ps:estimatedTime ?time ;
+        ps:challenge ?challenge ;
+        ps:solution ?solution ;
+        ps:result ?result .
+
+    # Sections
+    ?doc ps:hasSection ?section .
+    ?section ps:sectionTitle ?sectionTitle ;
+        ps:sectionContent ?sectionContent ;
+        ps:sectionLevel ?sectionLevel ;
+        ps:sectionOrder ?sectionOrder .
+}
+ORDER BY ?path ?sectionOrder
+"""
+
+# ---------------------------------------------------------------------------
+# Canonicalization
+# ---------------------------------------------------------------------------
+
+[canonicalization]
+# Markdown linting/formatting (optional, can add mdformat later)
+enabled = false
+
+# ---------------------------------------------------------------------------
+# Receipt generation
+# ---------------------------------------------------------------------------
+
+[receipt]
+enabled = true
+output = "GENERATION-RECEIPT.json"
+hash_algorithm = "sha256"
+include_timestamp = true
+include_ontology_hash = true
+include_query_hashes = true
+include_template_hashes = true

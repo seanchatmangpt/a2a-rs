@@ -1,0 +1,111 @@
+{#
+  Tera template for generating paradigm-shift documentation from RDF ontology.
+
+  This template implements μ₃ (Emit) in the ggen pipeline.
+  Input: Shaped RDF graph from CONSTRUCT query (μ₂)
+  Output: Markdown documentation files
+
+  Key Principle: Templates are PURE FOLDS over pre-shaped IR.
+  No structure rebuilding, no grouping, no joins—all topology determined in CONSTRUCT.
+#}
+{%- for doc in documents -%}
+{#- Generate document header -#}
+# {{ doc.title }}
+
+{%- if doc.metadata %}
+> **Phase**: {{ doc.metadata.phase }} | **Priority**: {{ doc.metadata.priority }} | **Audience**: {{ doc.metadata.targetPersona }} | **Time**: {{ doc.metadata.estimatedTime }}
+{%- endif %}
+
+{#- Render sections in order -#}
+{%- for section in doc.sections | sort(attribute="order") %}
+
+{% for _ in range(end=section.level) %}#{% endfor %} {{ section.title }}
+
+{{ section.content }}
+{%- endfor %}
+
+{#- Exercise-specific elements -#}
+{%- if doc.exercise %}
+
+## Success Criteria
+
+{%- for criteria in doc.exercise.successCriteria %}
+- [ ] {{ criteria }}
+{%- endfor %}
+
+{%- if doc.exercise.starterFiles %}
+
+## Starter Files
+
+{%- for file in doc.exercise.starterFiles %}
+
+### `{{ file.name }}`
+
+```{{ file.language | default(value="") }}
+{{ file.content }}
+```
+{%- endfor %}
+{%- endif %}
+
+{%- if doc.exercise.prerequisite %}
+
+**Prerequisite**: [{{ doc.exercise.prerequisite.title }}]({{ doc.exercise.prerequisite.path }})
+{%- endif %}
+
+{%- endif %}
+
+{#- Case study-specific elements -#}
+{%- if doc.caseStudy %}
+
+## Challenge
+
+{{ doc.caseStudy.challenge }}
+
+## Solution
+
+{{ doc.caseStudy.solution }}
+
+## Results
+
+{{ doc.caseStudy.result }}
+
+{%- if doc.caseStudy.metrics %}
+
+### Key Metrics
+
+| Metric | Value |
+|--------|-------|
+{%- for metric in doc.caseStudy.metrics %}
+| {{ metric.name }} | {{ metric.value }} |
+{%- endfor %}
+{%- endif %}
+
+{%- endif %}
+
+{#- Business doc-specific elements -#}
+{%- if doc.businessDoc %}
+
+## Executive Summary
+
+{{ doc.businessDoc.executiveSummary }}
+
+{%- if doc.businessDoc.benefits %}
+
+## Quantifiable Benefits
+
+| Benefit | Value |
+|---------|-------|
+{%- for benefit in doc.businessDoc.benefits %}
+| {{ benefit.name }} | {{ benefit.value }} |
+{%- endfor %}
+{%- endif %}
+
+{%- endif %}
+
+---
+
+*Generated from ontology `paradigm-shift.ttl` via ggen CONSTRUCT pipeline.*
+*Source hash: `{{ receipt.ontologyHash | default(value="[pending]") }}`*
+*Generated: {{ receipt.timestamp | default(value="[pending]") }}*
+
+{% endfor %}
