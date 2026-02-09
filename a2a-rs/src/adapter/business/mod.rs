@@ -3,6 +3,8 @@
 #[cfg(feature = "server")]
 pub mod agent_info;
 #[cfg(feature = "server")]
+pub mod firewall;
+#[cfg(feature = "server")]
 pub mod message_handler;
 #[cfg(feature = "server")]
 pub mod push_notification;
@@ -12,6 +14,8 @@ pub mod request_processor;
 // Re-export business implementations
 #[cfg(feature = "server")]
 pub use agent_info::SimpleAgentInfo;
+#[cfg(feature = "server")]
+pub use firewall::{AdmissionConfig, DefaultAdmissionController};
 #[cfg(feature = "server")]
 pub use message_handler::DefaultMessageHandler;
 #[cfg(all(feature = "server", feature = "http-client"))]
