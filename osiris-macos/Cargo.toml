@@ -1,0 +1,45 @@
+[package]
+name = "osiris-macos"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Emil Lindfors <emil@lindfors.no>"]
+description = "macOS Actuator Agent for the A2A Protocol - bounded real-world actuation"
+license = "MIT"
+
+[dependencies]
+# A2A Protocol core
+a2a-rs = { path = "../a2a-rs", features = ["full"] }
+
+# Core dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+uuid = { version = "1.4", features = ["v4", "serde"] }
+bon = "2.3"
+dotenvy = "0.15.7"
+
+# Async foundation
+tokio = { version = "1.32", features = ["rt", "rt-multi-thread", "macros", "net", "io-util", "sync", "time", "fs", "process"] }
+async-trait = "0.1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# macOS system integration
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5"
+objc2-foundation = { version = "0.2", features = ["NSString", "NSArray", "NSDictionary", "NSError"] }
+objc2-app-kit = { version = "0.2", features = ["NSWorkspace", "NSRunningApplication"] }
+core-foundation = "0.9"
+core-graphics = "0.23"
+
+[features]
+default = []
+# Future feature flags for different actuation capabilities
+automation = []
+filesystem = []
+process = []
+ui = []
+full = ["automation", "filesystem", "process", "ui"]

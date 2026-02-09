@@ -34,15 +34,17 @@ impl AgentToToolAdapter {
 
     /// Generate RMCP tools from an A2A agent
     pub fn generate_tools(&self, agent: &AgentCard, agent_url: &str) -> Vec<Tool> {
-        agent.skills.iter().map(|skill| {
-            self.skill_to_tool(skill, agent, agent_url)
-        }).collect()
+        agent
+            .skills
+            .iter()
+            .map(|skill| self.skill_to_tool(skill, agent, agent_url))
+            .collect()
     }
 
     /// Convert an A2A skill to an RMCP tool
     fn skill_to_tool(&self, skill: &Skill, agent: &AgentCard, agent_url: &str) -> Tool {
         let tool_name = format!("{}:{}", agent_url, skill.name);
-        
+
         Tool {
             name: tool_name,
             description: format!("{} - {}", agent.description, skill.description),
@@ -51,10 +53,15 @@ impl AgentToToolAdapter {
     }
 
     /// Convert RMCP tool call to A2A task parameters
-    pub fn tool_call_to_task(&self, call: &ToolCall, agent_card: &AgentCard, method: &str) -> Result<a2a_rs::domain::task::Task> {
+    pub fn tool_call_to_task(
+        &self,
+        call: &ToolCall,
+        agent_card: &AgentCard,
+        method: &str,
+    ) -> Result<a2a_rs::domain::task::Task> {
         // Create a message from the tool call
         let message = self.converter.tool_call_to_message(call)?;
-        
+
         // Create a task with the message
         Ok(a2a_rs::domain::task::Task {
             id: uuid::Uuid::new_v4().to_string(),
@@ -76,7 +83,7 @@ impl AgentToToolAdapter {
     pub fn task_to_tool_response(&self, task: &a2a_rs::domain::task::Task) -> Result<ToolResponse> {
         // Extract the last agent message
         let agent_message = self.converter.extract_agent_message(task)?;
-        
+
         // Convert to tool response
         self.converter.message_to_tool_response(agent_message)
     }
@@ -87,7 +94,7 @@ impl AgentToToolAdapter {
         if parts.len() != 2 {
             return Err(Error::InvalidToolMethod(tool_method.to_string()));
         }
-        
+
         Ok((parts[0].to_string(), parts[1].to_string()))
     }
 }

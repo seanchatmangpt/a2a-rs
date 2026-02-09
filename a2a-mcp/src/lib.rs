@@ -31,11 +31,15 @@
 // and a simple example. In a full implementation, this would be expanded
 // to include all the modules listed below.
 
+pub mod adapter;
+pub mod application;
+pub mod domain;
+pub mod error;
+pub mod port;
+
 /*
-mod error;
 mod message;
 mod transport;
-mod adapter;
 mod client;
 mod server;
 mod util;
@@ -43,12 +47,29 @@ mod util;
 mod tests;
 
 // Re-export key components
-pub use error::{Error, Result};
 pub use client::A2aRmcpClient;
 pub use server::RmcpA2aServer;
 pub use adapter::{AgentToToolAdapter, ToolToAgentAdapter};
 pub use message::MessageConverter;
 */
+
+// Re-export error types
+pub use error::{Error, Result};
+
+// Re-export domain types
+pub use domain::{
+    McpTask, McpTaskError, McpTaskGetParams, McpTaskResult, McpTaskResultParams, McpTaskState,
+    Session,
+};
+
+// Re-export port traits
+pub use port::{McpTaskManager, SessionManager, mcp_task_error, mcp_task_error_with_data};
+
+// Re-export adapter implementations
+pub use adapter::{InMemorySessionManager, TaskWrapper};
+
+// Re-export application components
+pub use application::{JsonRpcRequest, JsonRpcResponse, McpTaskHandler};
 
 // Version information
 /// Current crate version

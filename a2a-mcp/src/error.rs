@@ -41,13 +41,25 @@ pub enum Error {
     #[error("RMCP tool call error: {0}")]
     RmcpToolCall(String),
 
+    /// Origin validation failed - DNS rebinding defense
+    #[error("Origin forbidden: {0}")]
+    OriginForbidden(String),
+
+    /// Session not found
+    #[error("Session not found: {0}")]
+    SessionNotFound(String),
+
+    /// Session already exists
+    #[error("Session already exists: {0}")]
+    SessionAlreadyExists(String),
+
+    /// Session error
+    #[error("Session error: {0}")]
+    Session(String),
+
     /// JSON serialization/deserialization error
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
-
-    /// HTTP request error
-    #[error("HTTP error: {0}")]
-    Http(#[from] reqwest::Error),
 
     /// IO error
     #[error("IO error: {0}")]
@@ -78,7 +90,7 @@ pub(crate) fn rmcp_error_to_a2a_code(rmcp_err: &rmcp::ServerJsonRpcMessage) -> i
             -32601 => -32601, // Method not found
             -32602 => -32602, // Invalid params
             -32603 => -32603, // Internal error
-            _ => -32000, // Server error
+            _ => -32000,      // Server error
         }
     } else {
         -32000 // Default server error

@@ -2,7 +2,11 @@
 
 use crate::error::{Error, Result};
 use crate::message::MessageConverter;
-use a2a_rs::domain::{agent::{AgentCard, Capabilities, Authentication, Skill}, task::{Task, TaskState, TaskStatus}, message::{Message, MessagePart}};
+use a2a_rs::domain::{
+    agent::{AgentCard, Authentication, Capabilities, Skill},
+    message::{Message, MessagePart},
+    task::{Task, TaskState, TaskStatus},
+};
 use rmcp::{Tool, ToolCall, ToolResponse};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -25,12 +29,14 @@ impl ToolToAgentAdapter {
             converter: Arc::new(MessageConverter::new()),
         }
     }
-    
+
     /// Generate A2A agent card from RMCP tools
     pub fn generate_agent_card(&self) -> AgentCard {
         // Create skills from tools
-        let skills = self.tools.iter().map(|tool| {
-            Skill {
+        let skills = self
+            .tools
+            .iter()
+            .map(|tool| Skill {
                 name: tool.name.clone(),
                 description: tool.description.clone(),
                 inputs: None,
@@ -38,9 +44,9 @@ impl ToolToAgentAdapter {
                 input_modes: Some(vec!["text".to_string(), "data".to_string()]),
                 output_modes: Some(vec!["text".to_string(), "data".to_string()]),
                 metadata: None,
-            }
-        }).collect();
-        
+            })
+            .collect();
+
         AgentCard {
             name: self.agent_name.clone(),
             description: self.agent_description.clone(),
@@ -61,25 +67,25 @@ impl ToolToAgentAdapter {
             metadata: None,
         }
     }
-    
+
     /// Map RMCP tool call to A2A task
     pub fn tool_call_to_task(&self, call: &ToolCall) -> Result<Task> {
         // Create an A2A task from an RMCP tool call
         let task_id = Uuid::new_v4().to_string();
-        
+
         let initial_message = Message {
             role: "user".to_string(),
             parts: vec![
-                MessagePart::Text { 
-                    text: format!("Call tool: {}", call.method) 
+                MessagePart::Text {
+                    text: format!("Call tool: {}", call.method),
                 },
-                MessagePart::Data { 
+                MessagePart::Data {
                     data: call.params.clone(),
                     mime_type: Some("application/json".to_string()),
                 },
             ],
         };
-        
+
         Ok(Task {
             id: task_id,
             status: TaskStatus {
@@ -92,12 +98,12 @@ impl ToolToAgentAdapter {
             metadata: None,
         })
     }
-    
+
     /// Map A2A task result to RMCP tool response
     pub fn task_to_tool_response(&self, task: &Task) -> Result<ToolResponse> {
         // Extract the last agent message from the task
         let last_message = self.converter.extract_agent_message(task)?;
-        
+
         // Convert to tool response
         self.converter.message_to_tool_response(last_message)
     }
@@ -110,7 +116,9 @@ impl ToolToAgentAdapter {
     /// Extract tool name and parameters from an A2A message
     pub fn extract_tool_call(&self, message: &Message) -> Result<(String, serde_json::Value)> {
         // Try to find a text part with "Call tool: " prefix
-        let tool_name = message.parts.iter()
+        let tool_name = message
+            .parts
+            .iter()
             .find_map(|part| {
                 if let MessagePart::Text { text } = part {
                     if text.starts_with("Call tool: ") {
@@ -123,9 +131,11 @@ impl ToolToAgentAdapter {
                 }
             })
             .ok_or_else(|| Error::Translation("Unable to extract tool name from message".into()))?;
-        
+
         // Try to find a data part
-        let params = message.parts.iter()
+        let params = message
+            .parts
+            .iter()
             .find_map(|part| {
                 if let MessagePart::Data { data, .. } = part {
                     Some(data.clone())
@@ -134,7 +144,7 @@ impl ToolToAgentAdapter {
                 }
             })
             .unwrap_or(serde_json::Value::Null);
-        
+
         Ok((tool_name, params))
     }
 }

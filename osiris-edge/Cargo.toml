@@ -1,0 +1,58 @@
+[package]
+name = "osiris-edge"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Emil Lindfors <emil@lindfors.no>"]
+description = "Edge Gateway for OSIRIS CLM - single ingress point"
+license = "MIT"
+repository = "https://github.com/emillindfors/a2a-rs"
+keywords = ["a2a", "osiris", "gateway", "edge", "clm"]
+categories = ["network-programming", "web-programming::http-server"]
+
+[dependencies]
+# Workspace dependencies
+a2a-rs = { path = "../a2a-rs", features = ["full"] }
+a2a-mcp = { path = "../a2a-mcp" }
+
+# Core dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+bon = "2.3"
+uuid = { version = "1.4", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+sha2 = "0.10"
+
+# Async runtime
+tokio = { version = "1.32", features = ["rt", "rt-multi-thread", "macros", "net", "io-util", "sync", "time", "signal"] }
+async-trait = "0.1"
+futures = "0.3"
+
+# HTTP server
+axum = { version = "0.7", features = ["macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors", "compression-full", "timeout"] }
+hyper = { version = "1.0", features = ["full"] }
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+
+# Configuration
+dotenvy = "0.15.7"
+
+# Authentication
+jsonwebtoken = "9.3"
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+
+[dev-dependencies]
+# Testing
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+
+[features]
+default = []
+
+[[bin]]
+name = "osiris-edge"
+path = "src/main.rs"
