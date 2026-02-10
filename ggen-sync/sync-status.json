@@ -1,0 +1,38 @@
+[
+  {
+    "Added": {
+      "type_name": "NewAgentCapability"
+    }
+  },
+  {
+    "Modified": {
+      "type_name": "Message",
+      "field_changes": [
+        {
+          "Added": {
+            "name": "timestamp",
+            "field_type": "DateTime<Utc>"
+          }
+        },
+        {
+          "Removed": {
+            "name": "deprecated_field",
+            "field_type": "String"
+          }
+        },
+        {
+          "TypeMismatch": {
+            "name": "version",
+            "ontology_type": "String",
+            "code_type": "u32"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "Removed": {
+      "type_name": "LegacyType"
+    }
+  }
+]

@@ -1,6 +1,7 @@
 //! Report generation for sync differences
 
 use crate::types::SyncDiff;
+use std::io::Write;
 
 /// Generate and print a sync status report
 pub fn report_sync_status(diffs: &[SyncDiff]) {
@@ -66,6 +67,25 @@ pub fn report_sync_status(diffs: &[SyncDiff]) {
     );
 }
 
+/// Generate JSON output for sync differences
+///
+/// Returns a JSON string representation of the diffs that can be consumed
+/// by the web viewer or other tools.
+pub fn report_sync_json(diffs: &[SyncDiff]) -> Result<String, serde_json::Error> {
+    serde_json::to_string_pretty(diffs)
+}
+
+/// Write JSON report to a writer (file, stdout, etc.)
+pub fn write_sync_json<W: Write>(
+    diffs: &[SyncDiff],
+    writer: &mut W,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let json = report_sync_json(diffs)?;
+    writer.write_all(json.as_bytes())?;
+    writer.write_all(b"\n")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -120,5 +140,43 @@ mod tests {
             .filter(|d| matches!(d, SyncDiff::Added { .. }))
             .count();
         assert_eq!(added_count, 2);
+    }
+
+    #[test]
+    fn test_json_report_empty() {
+        let diffs = vec![];
+        let json = report_sync_json(&diffs).unwrap();
+        assert_eq!(json, "[]");
+    }
+
+    #[test]
+    fn test_json_report_serialization() {
+        let diffs = vec![
+            SyncDiff::Added {
+                type_name: "NewType".to_string(),
+            },
+            SyncDiff::Removed {
+                type_name: "OldType".to_string(),
+            },
+        ];
+        let json = report_sync_json(&diffs).unwrap();
+
+        // Verify it's valid JSON and can be deserialized
+        let parsed: Vec<SyncDiff> = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, diffs);
+    }
+
+    #[test]
+    fn test_write_json_to_buffer() {
+        let diffs = vec![SyncDiff::Added {
+            type_name: "TestType".to_string(),
+        }];
+
+        let mut buffer = Vec::new();
+        write_sync_json(&diffs, &mut buffer).unwrap();
+
+        let output = String::from_utf8(buffer).unwrap();
+        assert!(output.contains("TestType"));
+        assert!(output.contains("Added"));
     }
 }

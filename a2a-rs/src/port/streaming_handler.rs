@@ -2,7 +2,9 @@
 
 #[cfg(feature = "server")]
 use async_trait::async_trait;
+#[cfg(feature = "server")]
 use futures::Stream;
+#[cfg(feature = "server")]
 use std::pin::Pin;
 
 use crate::domain::{A2AError, TaskArtifactUpdateEvent, TaskStatusUpdateEvent};
@@ -29,6 +31,7 @@ pub trait Subscriber<T>: Send + Sync {
 }
 
 /// A trait for managing streaming connections and real-time updates
+#[cfg(feature = "server")]
 pub trait StreamingHandler {
     /// Add a status update subscriber for a task
     fn add_status_subscriber(
@@ -155,12 +158,14 @@ pub trait AsyncStreamingHandler: Send + Sync {
 }
 
 /// Union type for different kinds of updates that can be streamed
+#[cfg(feature = "server")]
 #[derive(Debug, Clone)]
 pub enum UpdateEvent {
     StatusUpdate(TaskStatusUpdateEvent),
     ArtifactUpdate(TaskArtifactUpdateEvent),
 }
 
+#[cfg(feature = "server")]
 impl UpdateEvent {
     /// Get the task ID from the update event
     pub fn task_id(&self) -> &str {

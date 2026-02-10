@@ -94,10 +94,12 @@ pub use domain::{
 };
 
 // Port traits for better separation of concerns
+pub use port::{MessageHandler, NotificationManager, TaskManager};
+
+#[cfg(feature = "server")]
 pub use port::{
     AsyncMessageHandler, AsyncNotificationManager, AsyncStreamingHandler, AsyncTaskManager,
-    MessageHandler, NotificationManager, StreamingHandler, StreamingSubscriber, TaskManager,
-    UpdateEvent,
+    StreamingHandler, StreamingSubscriber, UpdateEvent,
 };
 
 // CONSTRUCT framework exports

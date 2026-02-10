@@ -1,0 +1,38 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "a2a-construct"
+version = "0.1.0"
+description = "Python bindings for the A2A CONSTRUCT runtime - deterministic agent execution with cryptographic receipts"
+authors = [
+    { name = "A2A Contributors" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT OR Apache-2.0" }
+keywords = ["a2a", "construct", "runtime", "receipts", "deterministic"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Rust",
+]
+
+[project.urls]
+Homepage = "https://github.com/chrishayuk/a2a-rs"
+Repository = "https://github.com/chrishayuk/a2a-rs"
+Documentation = "https://github.com/chrishayuk/a2a-rs/tree/master/a2a-py"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+python-source = "python"
+module-name = "a2a_construct"

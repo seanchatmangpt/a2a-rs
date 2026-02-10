@@ -1,6 +1,7 @@
 //! Message handling port definitions
 
 #[cfg(feature = "server")]
+#[cfg(feature = "server")]
 use async_trait::async_trait;
 
 use crate::domain::{A2AError, Message, Task};

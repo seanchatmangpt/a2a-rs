@@ -27,6 +27,8 @@
 //! }
 //! ```
 
+pub mod dsl;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -895,7 +897,7 @@ impl Guard for StateTransitionGuard {
 /// This uses a simple JSON serialization + length-based hash. In production,
 /// this should be replaced with a cryptographic hash (SHA-256, BLAKE3, etc.)
 /// to provide tamper-evident audit trails.
-fn compute_input_hash(input: &serde_json::Value) -> String {
+pub(crate) fn compute_input_hash(input: &serde_json::Value) -> String {
     // Simple deterministic hash for now - in production use proper crypto hash
     let json_str = serde_json::to_string(input).unwrap_or_else(|_| "null".to_string());
     format!("hash-{:x}", simple_hash(&json_str))

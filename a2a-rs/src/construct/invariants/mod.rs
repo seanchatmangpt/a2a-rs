@@ -32,10 +32,12 @@ use std::collections::BTreeMap;
 use thiserror::Error;
 
 mod artifact;
+pub mod dsl;
 mod event;
 mod task_state;
 
 pub use artifact::{ArtifactImmutabilityInvariant, ArtifactSnapshot};
+pub use dsl::{InvariantExpr, parse_invariant};
 pub use event::{EventOrderingInvariant, EventSequence};
 pub use task_state::TaskStateInvariant;
 

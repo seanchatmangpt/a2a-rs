@@ -16,7 +16,9 @@ pub mod events;
 pub mod guards;
 pub mod invariants;
 pub mod methods;
+pub mod observability;
 pub mod ontology;
+pub mod replay;
 pub mod runtime;
 pub mod station;
 pub mod task_fsm;
@@ -24,6 +26,9 @@ pub mod types;
 
 #[cfg(feature = "receipts")]
 pub mod receipts;
+
+#[cfg(feature = "sqlx-storage")]
+pub mod storage;
 
 #[cfg(test)]
 pub mod tests;
@@ -51,7 +56,8 @@ pub use guards::{
 // Re-export invariant types
 pub use invariants::{
     ArtifactImmutabilityInvariant, ArtifactSnapshot, EventOrderingInvariant, EventSequence,
-    Invariant, InvariantRegistry, InvariantResult, InvariantViolation, TaskStateInvariant,
+    Invariant, InvariantExpr, InvariantRegistry, InvariantResult, InvariantViolation,
+    TaskStateInvariant, parse_invariant,
 };
 
 // Re-export method signature types (protocol realization)
@@ -73,6 +79,12 @@ pub use ontology::{
 
 #[cfg(feature = "receipts")]
 pub use receipts::{Receipt, ReceiptChain, ReceiptError, compute_hash, compute_receipt_hash};
+
+#[cfg(all(feature = "sqlx-storage", feature = "receipts"))]
+pub use storage::{ReceiptStore, ReceiptStoreError};
+
+#[cfg(feature = "sqlx-storage")]
+pub use storage::{AsyncOntologyStorage, SqlxOntologyStore};
 
 // Re-export typed packet system
 pub use types::{
@@ -105,8 +117,24 @@ pub use task_fsm::{
     StateTransition, StateTransitionError, TaskStateMachine, TransitionGuard, TransitionResult,
 };
 
+// Re-export observability types
+pub use observability::{MetricsSnapshot, ObservabilityContext, OperationTiming, RuntimeMetrics};
+
+#[cfg(feature = "tracing")]
+pub use observability::{InstrumentedGuard, InstrumentedInvariant};
+
 // Re-export station types (Note: station::RefusalReceipt is separate from guards::RefusalReceipt)
 pub use station::{
     CancelTaskStation, GetExtendedCardStation, GetTaskStation, ListTasksStation, Ontology,
     SendMessageStation, Station, StationHandler, StationRegistry,
 };
+
+// Re-export replay types
+pub use replay::{
+    DebuggerConfig, DebuggerStatus, DifferenceKind, ExecutionRecorder, ExecutionReplayer,
+    RecordedStep, ReplayDebugger, ReplayResult, SnapshotDiff, StateSnapshot, StepReport,
+    StepResult, StepSummary,
+};
+
+#[cfg(feature = "receipts")]
+pub use replay::ReceiptChainVerifier;

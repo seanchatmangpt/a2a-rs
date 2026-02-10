@@ -1,5 +1,6 @@
 //! Authentication port - defines the interface for authentication in the domain
 
+#[cfg(feature = "auth")]
 use async_trait::async_trait;
 use std::collections::HashMap;
 
@@ -39,6 +40,7 @@ impl AuthContext {
 }
 
 /// Port interface for authentication handlers
+#[cfg(feature = "auth")]
 #[async_trait]
 pub trait Authenticator: Send + Sync {
     /// Authenticate a request based on the provided context
@@ -80,6 +82,7 @@ impl AuthPrincipal {
 }
 
 /// Port interface for authentication context extraction
+#[cfg(feature = "auth")]
 #[async_trait]
 pub trait AuthContextExtractor: Send + Sync {
     /// Extract authentication context from HTTP headers
@@ -101,6 +104,7 @@ pub trait AuthContextExtractor: Send + Sync {
 }
 
 /// Composite authenticator that tries multiple authentication methods
+#[cfg(feature = "auth")]
 #[async_trait]
 pub trait CompositeAuthenticator: Send + Sync {
     /// Try to authenticate using any available scheme

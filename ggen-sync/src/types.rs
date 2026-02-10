@@ -1,9 +1,10 @@
 //! Core types for ontology-code comparison
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// A field definition with name and type
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FieldDef {
     pub name: String,
     pub field_type: String,
@@ -19,7 +20,7 @@ impl FieldDef {
 }
 
 /// A type defined in the RDF ontology
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OntologyNode {
     pub name: String,
     pub fields: Vec<FieldDef>,
@@ -48,7 +49,7 @@ impl OntologyNode {
 }
 
 /// A type found in generated Rust code
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CodeNode {
     pub name: String,
     pub fields: Vec<FieldDef>,
@@ -77,7 +78,7 @@ impl CodeNode {
 }
 
 /// A change to a field
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FieldChange {
     /// Field exists in ontology but not in code
     Added { name: String, field_type: String },
@@ -92,7 +93,7 @@ pub enum FieldChange {
 }
 
 /// A detected difference between ontology and code
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SyncDiff {
     /// Type exists in ontology but not in generated code
     Added { type_name: String },

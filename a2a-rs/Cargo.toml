@@ -21,6 +21,7 @@ uuid = { version = "1.4", features = ["v4", "serde"] }
 base64 = "0.21"
 url = { version = "2.4", features = ["serde"] }
 bon = "2.3"
+nom = "7.1"
 
 # Cryptography - optional
 sha2 = { version = "0.10", optional = true }
@@ -97,6 +98,11 @@ path = "examples/sqlx_storage_demo.rs"
 required-features = ["sqlx-storage", "tracing"]
 
 [[example]]
+name = "receipt_store_demo"
+path = "examples/receipt_store_demo.rs"
+required-features = ["sqlx-storage", "receipts", "sqlite"]
+
+[[example]]
 name = "storage_comparison"
 path = "examples/storage_comparison.rs"
 required-features = ["server", "tracing"]
@@ -106,7 +112,16 @@ name = "receipts_demo"
 path = "examples/receipts_demo.rs"
 required-features = ["receipts"]
 
+[[example]]
+name = "ws_station"
+path = "examples/ws_station.rs"
+required-features = ["ws-server", "receipts", "server"]
+
 [[bench]]
 name = "a2a_performance"
 harness = false
 required-features = ["full"]
+
+[[bench]]
+name = "scheduler_bench"
+harness = false

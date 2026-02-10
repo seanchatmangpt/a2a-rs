@@ -241,29 +241,29 @@ a2a:TestEntity_name a a2a:Property ;
     }
 }
 
-    #[test]
-    #[ignore] // This is an integration test that requires the ontology files
-    fn test_parse_real_agent_ontology() {
-        use std::path::Path;
-        
-        let ontology_path = Path::new("/home/user/a2a-rs/ggen/ontology/a2a-agent.ttl");
-        
-        if !ontology_path.exists() {
-            println!("Skipping test - ontology file not found");
-            return;
+#[test]
+#[ignore] // This is an integration test that requires the ontology files
+fn test_parse_real_agent_ontology() {
+    use std::path::Path;
+
+    let ontology_path = Path::new("/home/user/a2a-rs/ggen/ontology/a2a-agent.ttl");
+
+    if !ontology_path.exists() {
+        println!("Skipping test - ontology file not found");
+        return;
+    }
+
+    let result = parse_ttl_file(ontology_path);
+    match result {
+        Ok(entities) => {
+            println!("Parsed {} entities from a2a-agent.ttl", entities.len());
+            for (name, entity) in entities.iter() {
+                println!("  Entity: {} ({} fields)", name, entity.fields.len());
+            }
+            assert!(!entities.is_empty(), "Should parse at least one entity");
         }
-        
-        let result = parse_ttl_file(ontology_path);
-        match result {
-            Ok(entities) => {
-                println!("Parsed {} entities from a2a-agent.ttl", entities.len());
-                for (name, entity) in entities.iter() {
-                    println!("  Entity: {} ({} fields)", name, entity.fields.len());
-                }
-                assert!(!entities.is_empty(), "Should parse at least one entity");
-            }
-            Err(e) => {
-                panic!("Failed to parse ontology: {}", e);
-            }
+        Err(e) => {
+            panic!("Failed to parse ontology: {}", e);
         }
     }
+}

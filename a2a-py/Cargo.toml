@@ -1,0 +1,23 @@
+[package]
+name = "a2a-py"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["A2A Contributors"]
+description = "Python bindings for the A2A CONSTRUCT runtime"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/chrishayuk/a2a-rs"
+
+[lib]
+name = "a2a_py"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+a2a-rs = { path = "../a2a-rs", features = ["receipts", "receipts-signing"] }
+serde_json = "1.0"
+chrono = "0.4"
+thiserror = "2.0"
+
+[build-dependencies]
+pyo3-build-config = "0.22"

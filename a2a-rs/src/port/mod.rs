@@ -20,12 +20,24 @@ pub mod streaming_handler;
 pub mod task_manager;
 
 // Re-export business capability interfaces
-pub use authenticator::{
-    AuthContext, AuthContextExtractor, AuthPrincipal, Authenticator, CompositeAuthenticator,
-};
-pub use message_handler::{AsyncMessageHandler, MessageHandler};
-pub use notification_manager::{AsyncNotificationManager, NotificationManager};
+pub use authenticator::{AuthContext, AuthContextExtractor, AuthPrincipal, Authenticator};
+
+#[cfg(feature = "auth")]
+pub use authenticator::CompositeAuthenticator;
+
+#[cfg(feature = "server")]
+pub use message_handler::AsyncMessageHandler;
+pub use message_handler::MessageHandler;
+
+#[cfg(feature = "server")]
+pub use notification_manager::AsyncNotificationManager;
+pub use notification_manager::NotificationManager;
+
+#[cfg(feature = "server")]
 pub use streaming_handler::{
     AsyncStreamingHandler, StreamingHandler, Subscriber as StreamingSubscriber, UpdateEvent,
 };
-pub use task_manager::{AsyncTaskManager, TaskManager};
+
+#[cfg(feature = "server")]
+pub use task_manager::AsyncTaskManager;
+pub use task_manager::TaskManager;
