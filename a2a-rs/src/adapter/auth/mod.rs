@@ -17,7 +17,7 @@ pub use authenticator::{
 };
 
 #[cfg(feature = "auth")]
-pub use jwt::{JwtAuthenticator, JwtExtractor};
+pub use jwt::{AgentClaims, JwtAuthenticator, JwtConfig, JwtExtractor, TokenPair};
 
 #[cfg(feature = "auth")]
 pub use oauth2::{OAuth2Authenticator, OAuth2Extractor, OpenIdConnectAuthenticator};

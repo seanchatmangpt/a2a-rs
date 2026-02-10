@@ -1,6 +1,7 @@
 //! Core domain types for the A2A protocol
 
 pub mod agent;
+pub mod discovery;
 pub mod firewall;
 pub mod message;
 pub mod task;
@@ -10,6 +11,9 @@ pub use agent::{
     AgentProvider, AgentSkill, AuthorizationCodeOAuthFlow, ClientCredentialsOAuthFlow,
     ImplicitOAuthFlow, OAuthFlows, PasswordOAuthFlow, PushNotificationAuthenticationInfo,
     PushNotificationConfig, SecurityScheme, TransportProtocol,
+};
+pub use discovery::{
+    AgentQueryCriteria, AgentRegistration, HealthCheckResult, HealthStatus, RegistryStats,
 };
 pub use firewall::{
     AdmissionDecision, IngressChannel, JidokaMode, RefusalReason, RefusalReceipt, SupplierQuality,

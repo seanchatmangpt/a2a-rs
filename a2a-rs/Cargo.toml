@@ -25,11 +25,14 @@ petgraph = { version = "0.6", features = ["serde-1"] }
 
 # Database - optional
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "chrono", "uuid", "json"], optional = true }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager", "json"], optional = true }
 
 # Async foundation - optional
 tokio = { version = "1.32", features = ["rt", "rt-multi-thread", "macros", "net", "io-util", "sync", "time"], optional = true }
 async-trait = { version = "0.1", optional = true }
 futures = { version = "0.3", optional = true }
+async-stream = { version = "0.3", optional = true }
+tokio-stream = { version = "0.1", optional = true }
 
 # HTTP client - optional
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false, optional = true }
@@ -70,6 +73,12 @@ slog = { version = "2.7", optional = true }
 slog-stdlog = { version = "4.1", optional = true }
 bincode = { version = "1.3", optional = true }
 
+# Service discovery - optional
+dashmap = { version = "6.0", optional = true }
+
+# Metrics - optional
+prometheus = { version = "0.13", optional = true }
+
 # WASM - optional
 wasm-bindgen = { version = "0.2", optional = true }
 wasm-bindgen-futures = { version = "0.4", optional = true }
@@ -100,11 +109,15 @@ sqlx-storage = ["server", "dep:sqlx"]
 sqlite = ["sqlx-storage", "sqlx/sqlite"]
 postgres = ["sqlx-storage", "sqlx/postgres"]
 mysql = ["sqlx-storage", "sqlx/mysql"]
+redis = ["server", "dep:redis"]
 zerocopy = ["server", "dep:bytes", "dep:tokio-uring"]
 hotreload = ["server", "dep:libloading", "dep:notify", "dep:parking_lot"]
 wasm = ["dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:web-sys", "dep:js-sys", "dep:futures", "dep:async-trait"]
 distributed = ["server", "dep:raft", "dep:prost", "dep:slog", "dep:slog-stdlog", "dep:bincode"]
-full = ["http-client", "ws-client", "http-server", "ws-server", "tracing", "auth", "crypto", "sqlite", "postgres", "zerocopy", "hotreload", "wasm", "distributed"]
+streaming = ["server", "dep:axum", "dep:tokio", "dep:async-stream", "dep:tokio-stream", "dep:futures"]
+discovery = ["server", "dep:dashmap"]
+metrics = ["server", "dep:prometheus"]
+full = ["http-client", "ws-client", "http-server", "ws-server", "tracing", "auth", "crypto", "sqlite", "postgres", "redis", "zerocopy", "hotreload", "wasm", "distributed", "streaming", "discovery", "metrics"]
 
 
 [[example]]

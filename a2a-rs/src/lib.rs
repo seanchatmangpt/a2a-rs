@@ -119,6 +119,12 @@ pub use adapter::{
     NoopPushNotificationSender, PushNotificationRegistry, PushNotificationSender, SimpleAgentInfo,
 };
 
+#[cfg(feature = "sqlx-storage")]
+pub use adapter::SqlxTaskStorage;
+
+#[cfg(feature = "sqlite")]
+pub use adapter::SqliteTaskStorage;
+
 #[cfg(all(feature = "server", feature = "http-client"))]
 pub use adapter::HttpPushNotificationSender;
 

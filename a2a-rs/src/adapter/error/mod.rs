@@ -9,10 +9,10 @@ pub mod server;
 // Re-export client error types
 #[cfg(feature = "http-client")]
 pub use client::HttpClientError;
-#[cfg(feature = "ws-client")]
-pub use client::WebSocketClientError;
 #[cfg(feature = "wasm")]
 pub use client::WasmClientError;
+#[cfg(feature = "ws-client")]
+pub use client::WebSocketClientError;
 
 // Re-export server error types
 #[cfg(feature = "http-server")]
