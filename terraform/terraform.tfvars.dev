@@ -1,0 +1,43 @@
+# Development Environment Configuration
+
+project_id  = "my-dev-project"
+region      = "us-central1"
+environment = "dev"
+
+# Lower resource allocation for dev
+edge_memory             = "512Mi"
+edge_cpu                = "0.5"
+edge_min_instances      = 0
+edge_max_instances      = 2
+
+compiler_memory         = "1Gi"
+compiler_cpu            = "1"
+compiler_min_instances  = 0
+compiler_max_instances  = 5
+
+marketplace_memory      = "512Mi"
+marketplace_cpu         = "0.5"
+marketplace_min_instances = 0
+marketplace_max_instances = 2
+
+# Use latest images
+edge_image_tag        = "latest"
+compiler_image_tag    = "latest"
+marketplace_image_tag = "latest"
+
+# Enable internal-only access for dev
+enable_public_ingress = false
+enable_vpc_connector  = true
+create_custom_network = true
+
+# Enable all monitoring for development
+enable_tracing  = true
+enable_profiler = true
+
+# Dev environment tags
+tags = {
+  "team"        = "a2a-rs"
+  "project"     = "agent-to-agent"
+  "environment" = "dev"
+  "managed_by"  = "terraform"
+}

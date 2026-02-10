@@ -1,0 +1,151 @@
+# A2A-RS Terraform - Example Configuration
+# Copy this file and customize for your environment
+#
+# Development:  terraform.tfvars.dev
+# Staging:      terraform.tfvars.staging
+# Production:   terraform.tfvars.prod
+#
+# Usage:
+#   terraform apply -var-file="terraform.tfvars.dev"
+
+# ==============================================================================
+# PROJECT & REGION
+# ==============================================================================
+
+project_id = "my-project-id"
+region     = "us-central1"
+environment = "dev"
+
+# ==============================================================================
+# ARTIFACT REGISTRY
+# ==============================================================================
+
+artifact_registry_repo = "a2a-rs"
+edge_image_tag        = "latest"
+compiler_image_tag    = "latest"
+marketplace_image_tag = "latest"
+
+# ==============================================================================
+# EDGE SERVICE
+# ==============================================================================
+
+edge_memory             = "1Gi"
+edge_cpu                = "1"
+edge_timeout            = 3600
+edge_concurrency        = 100
+edge_min_instances      = 1
+edge_max_instances      = 10
+edge_env_vars = {
+  LOG_LEVEL           = "info"
+  ENABLE_METRICS      = "true"
+  ENABLE_TRACING      = "true"
+  WIP_LIMIT_THRESHOLD = "80"
+}
+# edge_secrets = {
+#   "API_KEY" = {
+#     secret  = "edge-api-key"
+#     version = "latest"
+#   }
+# }
+
+# ==============================================================================
+# COMPILER SERVICE
+# ==============================================================================
+
+compiler_memory             = "2Gi"
+compiler_cpu                = "2"
+compiler_timeout            = 3600
+compiler_concurrency        = 50
+compiler_min_instances      = 1
+compiler_max_instances      = 20
+compiler_env_vars = {
+  LOG_LEVEL                    = "info"
+  ENABLE_METRICS               = "true"
+  ENABLE_TRACING               = "true"
+  DETERMINISTIC_ORDERING       = "true"
+  PIPELINE_STAGE_TIMEOUT       = "300"
+  ENABLE_RECEIPT_STORAGE       = "true"
+}
+# compiler_secrets = {
+#   "GCS_KEY" = {
+#     secret  = "compiler-gcs-key"
+#     version = "latest"
+#   }
+# }
+
+# ==============================================================================
+# MARKETPLACE SERVICE
+# ==============================================================================
+
+marketplace_memory             = "1Gi"
+marketplace_cpu                = "1"
+marketplace_timeout            = 3600
+marketplace_concurrency        = 100
+marketplace_min_instances      = 1
+marketplace_max_instances      = 15
+marketplace_env_vars = {
+  LOG_LEVEL                     = "info"
+  ENABLE_METRICS                = "true"
+  ENABLE_TRACING                = "true"
+  ENABLE_SERVICE_CONTROL        = "true"
+  ENABLE_WORKSPACE_PUBLISHER    = "true"
+}
+# marketplace_secrets = {
+#   "SERVICE_ACCOUNT_KEY" = {
+#     secret  = "marketplace-sa-key"
+#     version = "latest"
+#   }
+# }
+
+# ==============================================================================
+# COMMON CONFIGURATION
+# ==============================================================================
+
+common_env_vars = {
+  ENVIRONMENT = "development"
+  RUST_LOG    = "info"
+  METRICS_NAMESPACE = "a2a-rs"
+}
+
+health_check_path    = "/health"
+enable_public_ingress = false
+
+# ==============================================================================
+# NETWORKING
+# ==============================================================================
+
+enable_vpc_connector        = false
+create_custom_network       = false
+network_name               = "a2a-rs-network"
+subnet_cidr                = "10.0.0.0/24"
+vpc_connector_cidr         = "10.8.0.0/28"
+vpc_connector_min_instances = 2
+vpc_connector_max_instances = 10
+
+# ==============================================================================
+# FEATURE FLAGS
+# ==============================================================================
+
+enable_firestore     = true
+enable_gcs           = true
+enable_service_control = true
+enable_load_balancer = false
+enable_cdn           = false
+
+# ==============================================================================
+# MONITORING
+# ==============================================================================
+
+enable_tracing  = true
+enable_profiler = false
+log_retention_days = 30
+
+# ==============================================================================
+# TAGS & LABELS
+# ==============================================================================
+
+tags = {
+  "team"    = "a2a-rs"
+  "project" = "agent-to-agent"
+  "managed_by" = "terraform"
+}

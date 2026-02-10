@@ -1,261 +1,251 @@
-# Rust Implementer Memory
+# Rust Implementer Agent Memory
 
-## Key Learnings
+## Quick Links
+- [Audit Logging](./audit-logging.md) - Cloud Logging with trace context (2026-02-10)
+- [WebSocket Transport](./websocket-transport.md) - Bidirectional streaming, heartbeat, reconnection (2026-02-10)
+- [Rate Limiter](./rate-limiter.md) - Token bucket rate limiting, per-IP/tenant, Axum middleware (2026-02-10)
+- [Artifact Publishing](./artifact-publishing.md) - Google Workspace publisher pattern (2026-02-10)
+- [SSE Streaming](./sse-streaming.md) - SSE resumable streaming patterns (2026-02-09)
+- [Prometheus Metrics](./metrics.md) - Metrics collection patterns (2026-02-10)
+- [OAuth2 PKCE](./oauth2-pkce.md) - RFC 7636 PKCE authenticator (2026-02-10)
+- [Redis Cache](./redis-cache.md) - Redis cache with TTL, invalidation, cache-aside (2026-02-10)
+- [MCP Tasks](./mcp-tasks-pattern.md) - MCP task management patterns
+- [Refusal Engine](./refusal-engine.md) - Cryptographic refusal receipts
+
+## Recent Work (OSIRIS CLM Implementation)
+
+### 20 Production Components (2026-02-10)
+Implemented comprehensive infrastructure, observability, and security components across osiris-compiler and osiris-edge.
+
+**osiris-compiler (10 components):**
+- Workflow patterns 21-30 (van der Aalst complete basis)
+- Workflow persistence (Firestore/Spanner checkpoint recovery)
+- Circuit breaker (failure isolation with state machine)
+- Audit logger (cryptographic event log with Cloud Logging)
+- Backup/restore (state snapshots with versioning)
+- Cloud Tasks queue (async job dispatch with retry)
+- gRPC transport (high-performance RPC with streaming)
+- Secret manager (credential storage with Cloud KMS)
+- Spanner state store (globally distributed strong consistency)
+- Cloud Workflows integration
+
+**osiris-edge (9 components):**
+- Pub/Sub event bus (async messaging with ordering)
+- Redis cache (distributed caching with TTL)
+- Rate limiter (token bucket, sliding window, per-tenant)
+- OAuth2 PKCE (RFC 7636 secure auth flow)
+- WebSocket transport (bidirectional streaming)
+- OpenTelemetry tracing (W3C distributed tracing)
+- Prometheus metrics (observability with Grafana)
+- BigQuery telemetry sink (analytics warehouse)
+- Rate limit middleware (Axum integration)
+
+**Infrastructure:**
+- Terraform configs (GCP deployment with all services)
+
+### WebSocket Transport (osiris-edge, 2026-02-10)
+Bidirectional WebSocket transport for TypedPacket streaming:
+- **Port trait**: `Transport` with 8 async methods (connect, send, receive, reconnect, batch, status)
+- **Adapter**: `WebSocketTransport` using tokio-tungstenite with TLS support
+- **Heartbeat**: Ping/pong with configurable intervals and timeout detection
+- **Reconnection**: Exponential backoff (100ms-30s), max retries, automatic recovery
+- **Status tracking**: Disconnected, Connecting, Connected, Degraded, Failed transitions
+- **Feature**: `ws = ["tokio-tungstenite"]`
+- **Files**: `port/transport.rs`, `adapter/websocket.rs`, `examples/websocket_transport.rs`, `docs/WEBSOCKET_TRANSPORT.md`
+
+### Workflow Persistence (osiris-compiler, 2026-02-10)
+Complete checkpoint/recovery system for workflow instances:
+- **Port trait**: `WorkflowStore` with 14 methods (checkpoint CRUD, query, recovery, export/import)
+- **Adapter**: `FirestoreWorkflowStore` with SHA-256 deterministic IDs, in-memory cache, auto-pruning
+- **Documents**: Lightweight metadata + full snapshots, flexible querying, batch operations
+- **Recovery**: Event replay with summary results
+- **Files**: `port/workflow_store.rs`, `adapter/workflow_persistence.rs`, `docs/WORKFLOW_PERSISTENCE.md`
+
+### Circuit Breaker (osiris-compiler, 2026-02-10)
+Production-ready failure isolation:
+- **States**: Closed → Open (on threshold) → HalfOpen (timeout) → Closed (success)
+- **Adapter**: `StandardCircuitBreaker` with `Arc<RwLock<InternalState>>` thread-safe state machine
+- **Configuration**: failure_threshold (5), success_threshold (2), timeout (30s), half_open_max_calls (1)
+- **Metrics**: failure/success/call counts, state transitions, timestamps
+- **Files**: `port/circuit_breaker.rs`, `adapter/circuit_breaker.rs`, `docs/CIRCUIT_BREAKER.md`
+
+### OpenTelemetry Integration (osiris-edge, 2026-02-10)
+Comprehensive distributed tracing:
+- **W3C Support**: Parse/format traceparent headers (00-traceId-spanId-flags)
+- **Backends**: Cloud Trace (gcloud), Jaeger (otel-jaeger), OTLP (otel)
+- **Context propagation**: Extract/inject headers for distributed traces
+- **Features**: `otel`, `otel-gcloud`, `otel-jaeger`
+- **Files**: `adapter/tracing.rs`, `examples/otel_tracing_demo.rs`, `docs/OTEL_INTEGRATION.md`
+
+### Prometheus Metrics (osiris-edge, 2026-02-10)
+Comprehensive metrics collection:
+- **Port trait**: `MetricsCollector` with record_request, record_error, gauges, counters, histograms
+- **Adapter**: `PrometheusCollector` with lazy metric creation, TextEncoder for /metrics
+- **Built-in metrics**: http_requests_total, http_request_duration_seconds, errors_total, active_connections
+- **Middleware**: Auto-tracks request duration and status codes
+- **Files**: `port/metrics.rs`, `adapter/metrics.rs`, `application/metrics_handler.rs`, `docs/METRICS.md`
+
+### Redis Cache (osiris-edge, 2026-02-10)
+Production-ready distributed caching:
+- **Port trait**: `Cache` generic over `Serialize + Deserialize` types
+- **Operations**: get, set, delete, exists, ttl, invalidate_pattern, get_or_load (cache-aside)
+- **Adapter**: `RedisCache` with JSON serialization, SCAN-based patterns, connection pooling
+- **Configuration**: URL, key prefix, TTL bounds, pattern limits
+- **Feature**: `redis = ["dep:redis"]`
+- **Files**: `port/cache.rs`, `adapter/cache.rs`, `examples/redis_cache_demo.rs`, `docs/REDIS_CACHE_GUIDE.md`
+
+### OAuth2 PKCE (osiris-edge, 2026-02-10)
+RFC 7636 PKCE flow for public clients:
+- **Domain types**: `CodeVerifier`, `CodeChallenge` (SHA256+base64url), authorization/token request/response
+- **Port trait**: `Oauth2Authenticator` with 13 async methods
+- **Adapter**: `PkceAuthenticator` with reqwest HTTP client, session storage, UUID+SHA256 crypto
+- **Security**: CSRF via state, code interception prevention, no client secrets
+- **Files**: `domain/oauth2.rs`, `port/oauth2_authenticator.rs`, `adapter/oauth_pkce.rs`, `examples/oauth2_pkce_flow.rs`, `docs/OAUTH2_PKCE.md`
+
+### Rate Limiter (osiris-edge, 2026-02-10)
+Token bucket and sliding window rate limiting:
+- **Port trait**: `RateLimiter` with check_limit, reset, remaining, get_limits
+- **Adapters**: `TokenBucketLimiter` (refill rate), `SlidingWindowLimiter` (time windows)
+- **Configuration**: Per-IP, per-tenant, per-user, global limits
+- **Middleware**: Axum middleware with automatic rejection
+- **Files**: `port/rate_limiter.rs`, `adapter/rate_limiter.rs`, `application/rate_limit_middleware.rs`, `examples/rate_limiter_demo.rs`, `docs/RATE_LIMITER.md`
+
+### HTTP Handlers - 7-Stage Pipeline (osiris-compiler, 2026-02-10)
+Complete compilation endpoint:
+- **Endpoints**: GET /health, POST /compile
+- **Pipeline**: Type Checker (Σ) → Guards (H) → Orderer (Λ) → Kernel → Invariants (Q) → Writer → Receipt Builder
+- **State**: `PipelineState` with `Arc<dyn Trait + Send + Sync>` for all ports
+- **Error handling**: `AppError` enum with per-stage HTTP status codes
+- **Files**: `application/http_handlers.rs`, `main.rs`
+
+### Axum Router (osiris-edge, 2026-02-10)
+HTTP gateway with admission control:
+- **Endpoints**: /health, /ready, /workspace/webhook, /mcp/*
+- **Middleware**: WIP gate, auth gate, refusal engine, normalizer
+- **Webhook processing**: Service detection (gmail/calendar/drive), typed packets
+- **Refusal receipts**: JSON receipts on auth/WIP/validation failures
+- **Files**: `application/router.rs`, `application/router/handlers.rs`
+
+## Earlier Work (a2a-rs Core)
 
 ### Workflow Pattern Implementation (2026-02-09)
+All 43 workflow patterns from Workflow Patterns Initiative in `a2a-rs/src/domain/workflow/patterns.rs`:
+- **Patterns**: BasicControlFlow, AdvancedBranchingAndSynchronization, MultipleInstance, StateBased, CancellationAndCompletion, Iteration, Termination, Trigger, Special (43 total)
+- **Graph**: petgraph DiGraph for topology analysis
+- **Detection**: Dfs for reachability, unreachable states, dead-ends, export states
+- **Testing**: Property-based tests proving incompleteness theorem
+- **Files**: `domain/workflow/patterns.rs`, `examples/workflow_pattern_checker.rs`
 
-Successfully implemented comprehensive workflow pattern completeness checker in `a2a-rs/src/domain/workflow/patterns.rs`:
+### SPARQL CONSTRUCT Optimizer (2026-02-09)
+Production-grade optimizer for ggen in `ggen-optimizer/`:
+- **Parser**: nom-based recursive descent for PREFIX, CONSTRUCT, WHERE clauses
+- **Analysis**: Dependency graph, connected components, join graph, selectivity estimation
+- **Cost Model**: Base operation costs, cardinality estimation, Amdahl's law for parallelism
+- **Optimization Passes**: Predicate pushdown, join elimination, subquery flattening, redundant elimination, parallel decomposition
+- **Files**: `lib.rs`, `parser.rs`, `analyzer.rs`, `cost.rs`, `rewriter.rs`
 
-**Implementation Details:**
-- All 43 workflow patterns from Workflow Patterns Initiative enumerated
-- Used petgraph (v0.6) for directed graph representation
-- Pattern detection via graph topology analysis
-- Property-based tests using proptest proving incompleteness theorem
+### TPS Coordinator (2026-02-09)
+Autonomous agent coordinator with Toyota Production System in `a2a-rs/src/services/coordinator.rs`:
+- **TPS Concepts**: Kanban board, pull scheduling, Andon system, Jidoka, Heijunka, Takt time
+- **Architecture**: `Arc<RwLock<CoordinatorState>>`, background tasks with tokio::spawn
+- **Metrics**: Cycle time, throughput, WIP, defect rate
+- **Files**: `services/coordinator.rs`, `examples/tps_coordinator.rs`
 
-**Key Design Decisions:**
-1. **Petgraph integration**: Added as core dependency (not optional) since workflow is domain logic
-2. **Serde compatibility**: All types derive Serialize/Deserialize with camelCase for JSON
-3. **Error handling**: Used thiserror for WorkflowError enum
-4. **Graph operations**: Used Dfs for reachability analysis, not Bfs (works better for cycles)
-5. **Ownership**: Calculate coverage before moving HashSet to avoid borrow-after-move errors
+### Cryptographic Receipt Validation (2026-02-09)
+Production-ready receipt validation in `a2a-rs/src/services/receipt.rs`:
+- **Components**: Receipt (ed25519 signature), ReceiptChain (hash pointers), MerkleTree (batch proofs), ReplayValidator
+- **Ed25519**: dalek v2.1 with SigningKey::from_bytes
+- **Merkle Proofs**: Bottom-up collection, (hash, is_right_sibling) tuples
+- **Feature**: `crypto = ["sha2", "ed25519-dalek", "hex"]`
+- **Files**: `services/receipt.rs`, `examples/receipt_demo.rs`, `examples/receipt_debug.rs`
 
-**Pattern Categories:**
-- BasicControlFlow (5 patterns)
-- AdvancedBranchingAndSynchronization (15 patterns)
-- MultipleInstance (7 patterns)
-- StateBased (3 patterns)
-- CancellationAndCompletion (5 patterns)
-- Iteration (2 patterns)
-- Termination (2 patterns)
-- Trigger (2 patterns)
-- Special (2 patterns)
+## Key Patterns
 
-**Tests Included:**
-- Unit tests for all basic patterns (Sequence, ParallelSplit, Synchronization, etc.)
-- Unreachable state detection
-- Dead-end detection
-- Export state (human task) detection
-- Property-based tests proving missing patterns cause incompleteness
-- Property-based tests for analysis consistency
+### Hexagonal Architecture
+1. **Domain first**: Pure types with validation in `domain/`
+2. **Port traits**: Async traits with `#[async_trait]` in `port/`
+3. **Adapter implementations**: Concrete implementations in `adapter/`
+4. **Module exports**: Update `mod.rs` files to export types/traits
+5. **Lib.rs integration**: Add public re-exports
 
-**Common Pitfalls Avoided:**
-- Don't use EdgeRef import if not needed (causes unused import warning)
-- Calculate HashSet.len() before calling into_iter() to avoid move
-- Mark unused variables with underscore prefix in proptest generators
-- Use Direction::Incoming/Outgoing for edge traversal
-
-**Files Created:**
-- `/home/user/a2a-rs/a2a-rs/src/domain/workflow/patterns.rs` (main implementation)
-- `/home/user/a2a-rs/a2a-rs/src/domain/workflow/mod.rs` (module exports)
-- `/home/user/a2a-rs/a2a-rs/examples/workflow_pattern_checker.rs` (comprehensive example)
-
-**Integration:**
-- Updated `/home/user/a2a-rs/a2a-rs/Cargo.toml` to add petgraph dependency
-- Updated `/home/user/a2a-rs/a2a-rs/src/domain/mod.rs` to export workflow module
-
-**Proof of Correctness:**
-The property-based tests prove the key theorem:
+### Deterministic Ordering (Λ-Laws)
+```rust
+A < B ⟺ priority(A) > priority(B)  ∨
+        (priority(A) = priority(B) ∧ timestamp(A) < timestamp(B))  ∨
+        (priority(A) = priority(B) ∧ timestamp(A) = timestamp(B) ∧ id(A) < id(B))
 ```
-∀ workflow W: missing_patterns(W) ≠ ∅ ⟹ is_complete(W) = false
+**Guarantees**: Determinism, Totality, Transitivity, Repeatability
+
+### CONSTRUCT8 Bounded Writer
+- Domain validation before backend execution
+- MAX_MUTATION_UNITS constant (8) enforced
+- Pluggable backend via StorageBackend + Transaction traits
+- Atomic commits with rollback
+- Delete before insert (SPARQL CONSTRUCT semantics)
+
+### Axum HTTP Handlers
+```rust
+#[derive(Clone)]
+pub struct AppState {
+    port_trait: Arc<dyn MyTrait + Send + Sync>, // Must be Send + Sync
+}
+
+async fn handler(
+    State(state): State<AppState>,
+    Json(request): Json<Request>,
+) -> Result<Json<Response>, AppError> {
+    // ...
+}
 ```
 
-Export states (human intervention) are detected by:
-- StateType::HumanTask markers
-- requires_export flag on WorkflowState
-- Analyzing graph topology for unreachable or incomplete patterns
+### Testing Strategy
+- Domain validation tests in domain module
+- Adapter tests with mock backends
+- Property-based tests for theorems (proptest)
+- Run specific tests: `cargo test -- module::path`
+- Use `#[tokio::test]` for async tests
 
-## Architecture Patterns
+## Common Issues
 
-- Domain types must have zero external dependencies (petgraph is acceptable for graph data structures)
-- All public domain types derive Debug, Clone, Serialize, Deserialize
-- Use #[serde(rename_all = "camelCase")] for JSON API compatibility
-- Property-based tests prove theorems about domain invariants
+### Cargo.toml Features
+- Some dependencies define their own feature flags causing `unexpected_cfgs` warnings (safe to ignore)
+- Always verify workspace member is in workspace Cargo.toml
 
-### SPARQL CONSTRUCT Query Optimizer (2026-02-09)
-
-Successfully implemented production-grade SPARQL optimizer for ggen in `ggen-optimizer/`:
-
-**Parser Architecture (nom):**
-- Recursive descent parser for SPARQL CONSTRUCT queries
-- Handles PREFIX, CONSTRUCT, WHERE clauses
-- Supports OPTIONAL, UNION, FILTER, BIND patterns
-- **Critical**: SPARQL allows trailing periods - use `opt(char('.'))` after parsing patterns
-- **Manual loop pattern**: When `separated_list0` doesn't handle edge cases, use:
+### Borrow Checker
+- Collect data before mutating to avoid multiple mutable borrows:
   ```rust
-  while let Ok((after_sep, _)) = parse_separator(remaining) {
-      if let Ok((after_item, item)) = parse_item(after_sep) {
-          items.push(item);
-          remaining = after_item;
-      } else {
-          break; // Separator without following item
-      }
+  let data: Vec<_> = state.map.iter().map(|(k, v)| (k.clone(), *v)).collect();
+  for (key, val) in data {
+      state.other_map.get_mut(&key); // OK - previous borrow done
   }
   ```
 
-**Static Analysis (petgraph):**
-- Dependency graph using `DiGraph<String, ()>` for variable dependencies
-- Connected components via `Dfs` for tensor product decomposition
-- Join graph showing shared variables between patterns
-- Selectivity estimation: fewer variables = more selective (0 vars → 0.01, 3 vars → 0.9)
-
-**Cost Model:**
-- Base operation costs: scan=1.0, join=10.0, filter=0.5, optional=5.0, union=2.0, bind=0.1
-- Cardinality estimation by variable count: 0→1, 1→100, 2→1000, 3→10000
-- Amdahl's law for parallel speedup: `1.0 / ((1.0 - p) + (p / n))` with p=0.8
-- Predicate statistics support via `PredicateStats` struct
-
-**Optimization Passes:**
-1. **Predicate Pushdown**: Move FILTERs into earliest pattern containing all filter variables
-2. **Join Elimination**: Remove OPTIONAL patterns with unused variables
-3. **Subquery Flattening**: Collapse nested Group patterns
-4. **Redundant Elimination**: Remove duplicate triple patterns
-5. **Parallel Decomposition**: Identify independent subqueries (tensor product)
-
-**Testing Strategy:**
-- Unit tests for each parser combinator
-- Debug programs for position-based error diagnosis
-- Property-based tests would prove optimization correctness (not implemented yet)
-- Doc tests in lib.rs example
-
-**Parser Debugging Pattern:**
+### Parser Debugging (nom)
 ```rust
-// Create debug program to show character positions
 println!("Query length: {}", query.len());
 println!("Character at position {}: {:?}", pos, query.chars().nth(pos));
 println!("Context: {:?}", &query[pos-5..pos+5]);
 ```
 
-**Clippy Fixes:**
-- Use `while let` instead of `loop { if let }` (clippy::while_let_loop)
-- Prefix unused parameters with `_` (or mark with `#[allow(dead_code)]`)
-- Remove unused imports aggressively
+### Ed25519 (dalek v2.1)
+- No `SigningKey::generate()` - use `SigningKey::from_bytes(&seed)` with 32 random bytes
+- `Signature::from_bytes()` returns `Signature`, not `Result`
 
-**Files Created:**
-- `/home/user/a2a-rs/ggen-optimizer/src/lib.rs` (public API)
-- `/home/user/a2a-rs/ggen-optimizer/src/error.rs` (thiserror types)
-- `/home/user/a2a-rs/ggen-optimizer/src/ast.rs` (SPARQL AST)
-- `/home/user/a2a-rs/ggen-optimizer/src/parser.rs` (nom parser)
-- `/home/user/a2a-rs/ggen-optimizer/src/analyzer.rs` (static analysis)
-- `/home/user/a2a-rs/ggen-optimizer/src/cost.rs` (cost model)
-- `/home/user/a2a-rs/ggen-optimizer/src/rewriter.rs` (optimizer)
-- `/home/user/a2a-rs/ggen-optimizer/README.md` (documentation)
-- `/home/user/a2a-rs/ggen-optimizer/Cargo.toml` (dependencies)
+### Bon Builder
+- Don't use `#[builder(default)]` on `Option<T>` - Option implies `None`
 
-**Dependencies:**
-- nom 7.1 for parsing
-- petgraph 0.6 for graph analysis
-- thiserror 2.0 for errors
-- serde 1.0 for serialization
-- indexmap 2.0, rustc-hash 2.0 for collections
-
-**Integration:**
-- Added to workspace in root Cargo.toml
-- Edition 2024, MSRV 1.85
-
-### TPS Coordinator Implementation (2026-02-09)
-
-Successfully implemented autonomous agent coordinator with Toyota Production System principles in `a2a-rs/src/services/coordinator.rs`:
-
-**Core TPS Concepts:**
-- **Kanban Board**: WIP limits per station to prevent overload
-- **Pull Scheduling**: Tasks pulled when capacity available (not pushed)
-- **Andon System**: Real-time status (GREEN/YELLOW/RED) based on utilization
-- **Jidoka**: Automatic halt on quality issues (defect rate threshold)
-- **Heijunka**: Level loading to smooth workflow over time
-- **Takt Time**: Rhythm-based scheduling aligned with demand
-- **Metrics**: Cycle time, throughput, WIP, defect rate tracking
-
-**Key Design Patterns:**
-1. **Async State Management**: `Arc<RwLock<CoordinatorState>>` for shared mutable state
-2. **Background Tasks**: Spawned with `tokio::spawn` for metrics, heijunka, andon monitoring
-3. **Borrow Checker**: Collect data before mutating to avoid multiple mutable borrows
-   ```rust
-   let data: Vec<_> = state.map.iter().map(|(k, v)| (k.clone(), *v)).collect();
-   for (key, val) in data {
-       state.other_map.get_mut(&key); // OK - previous borrow done
-   }
-   ```
-4. **Instant Serialization**: Use `#[serde(skip, default = "Instant::now")]` for `Instant` fields
-5. **Tracing**: Don't use `impl Into<String>` in `#[instrument]` functions - use `&str` instead
-
-**Architecture Decisions:**
-- Lives in services layer (orchestrates AsyncTaskManager port)
-- Public types: Station, AndonStatus, JidokaGate, etc. (all Serialize/Deserialize)
-- Internal types: CoordinatorState, TaskTiming (not serializable)
-- Feature-gated with `server` feature
-
-**Testing:**
-- Unit tests for pure functions (utilization, takt time, heijunka)
-- Integration example with SimpleTaskManager in `examples/tps_coordinator.rs`
-- Comprehensive demonstration of all TPS features
-
-**Common Pitfalls Avoided:**
-- Don't explicitly `drop()` references - causes clippy warnings
-- Don't hold locks across `.await` points (deadlock risk)
-- Don't use `Instant` with Serialize - use skip or chrono
-- Don't forget feature gates on tokio spawns
-
-**Files Created:**
-- `/home/user/a2a-rs/a2a-rs/src/services/coordinator.rs` (main implementation, ~1100 lines)
-- `/home/user/a2a-rs/a2a-rs/examples/tps_coordinator.rs` (comprehensive example)
-
-**Integration:**
-- Updated `/home/user/a2a-rs/a2a-rs/src/services/mod.rs` to export coordinator types
-- Builds successfully with `server` feature
-
-### Cryptographic Receipt Validation System (2026-02-09)
-
-Successfully implemented production-ready cryptographic receipt validation in `a2a-rs/src/services/receipt.rs`:
-
-**Core Components:**
-- **Receipt**: Single cryptographic receipt with ed25519 signature over ontology→output mapping
-- **ReceiptChain**: Blockchain-like chain with hash pointers for immutability
-- **MerkleTree**: Batch verification with O(log n) proofs
-- **ReplayValidator**: Deterministic build verification
-
-**Critical Implementation Details:**
-1. **Merkle Proof Generation**: Must collect bottom-up (leaf→root)
-   - Add sibling hashes AFTER recursing into target subtree
-   - Proof elements are `(hash, is_right_sibling)` tuples for correct positioning
-   - When verifying: if `is_right`, current is left; else current is right
-2. **Ed25519 (dalek v2.1)**:
-   - No `SigningKey::generate()` - use `SigningKey::from_bytes(&seed)` with 32 random bytes
-   - `Signature::from_bytes()` returns `Signature`, not `Result`
-3. **Bon Builder**: Don't use `#[builder(default)]` on `Option<T>` - Option implies `None`
-
-**Feature Gating:**
-- New `crypto` feature with deps: `sha2`, `ed25519-dalek`, `hex`
-- Exports through `services/mod.rs` and `lib.rs` when enabled
-- Added to `full` feature set
-
-**Testing:**
-- Unit tests in receipt.rs (currently blocked by unrelated errors in codebase)
-- Two example programs demonstrate all features:
-  - `receipt_demo.rs`: Comprehensive demo of all features
-  - `receipt_debug.rs`: Debug/trace Merkle proof generation
-
-**Files Created:**
-- `/home/user/a2a-rs/a2a-rs/src/services/receipt.rs` (~600 lines)
-- `/home/user/a2a-rs/a2a-rs/examples/receipt_demo.rs` (comprehensive demo)
-- `/home/user/a2a-rs/a2a-rs/examples/receipt_debug.rs` (debugging tool)
-- `/home/user/a2a-rs/.claude/agent-memory/rust-implementer/receipt-validation.md` (detailed notes)
-
-**Integration:**
-- Updated Cargo.toml with crypto dependencies and feature flag
-- All examples configured with `required-features = ["crypto"]`
-- Compiles cleanly with `cargo check -p a2a-rs --features crypto`
-- Demo runs successfully: `cargo run -p a2a-rs --example receipt_demo --features crypto`
+### Clippy
+- Use `while let` instead of `loop { if let }`
+- Prefix unused parameters with `_`
+- Don't explicitly `drop()` references
 
 ## Next Steps
 
-When building on this implementation:
-1. Consider adding adapter layer for workflow persistence (SQLx storage)
-2. Port trait for workflow execution engine
-3. Visualization adapter (GraphViz export)
-4. BPMN 2.0 import/export adapter
-5. Integrate ggen-optimizer into ggen CLI tool
-6. Add property-based tests proving optimization pass correctness
-7. Add WebSocket/HTTP endpoints for TPS coordinator real-time monitoring
-8. Implement coordinator persistence (save/restore state across restarts)
-9. Add receipt validation middleware for A2A protocol message verification
-10. Implement receipt storage adapter (SQLx-based persistent receipt chain)
+1. Complete Firestore backend integration with real API
+2. Add property-based tests for optimization passes
+3. Implement WebSocket/HTTP endpoints for TPS coordinator monitoring
+4. Add receipt validation middleware for A2A protocol
+5. Implement receipt storage adapter (SQLx persistent chain)
+6. Complete Spanner backend using same trait design
+7. Add BPMN 2.0 import/export adapter
+8. Visualization adapter (GraphViz export)
