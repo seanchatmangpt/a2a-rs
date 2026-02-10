@@ -39,28 +39,38 @@ pub mod domain;
 pub mod port;
 
 pub use domain::{
-    Commit, CommitVerificationResult, ComparisonOperator, DependencyRelation, GuardCondition,
-    GuardEvaluationResult, HGuard, InvariantCheckResult, InvariantPredicate, InvariantSeverity,
-    MAX_MUTATION_UNITS, Operation, OperationKind, OperationResult, OrderingError, Packet,
-    PacketType, Patch, PatchError, PatchSet, PreservationResult, QInvariant, Receipt, ReceiptError,
-    RefusalCategory, RefusalInfo, RefusalReason, RefusalReceipt, ReplayPointer, Sigma,
-    StateSnapshot, Triple, TriplePattern, TypeCheckResult, TypeSchema,
+    Artifact, ArtifactPublishError, Commit, CommitVerificationResult, ComparisonOperator,
+    DependencyRelation, DslBoundaryEventType, DslCompensation, DslCondition, DslElement,
+    DslEndResult, DslEventTrigger, DslFlow, DslGatewayType, DslIntermediateEventType,
+    DslLoopConfig, DslLoopType, DslServiceImplementation, DslTaskType, DslVariable, DslWorkflow,
+    GuardCondition, GuardEvaluationResult, HGuard, InvariantCheckResult, InvariantPredicate,
+    InvariantSeverity, MAX_MUTATION_UNITS, MerkleError, MerkleNode, MerkleProof, MerkleRoot,
+    MerkleTree, Operation, OperationKind, OperationResult, OrderingError, Packet, PacketType,
+    Patch, PatchError, PatchSet, PreservationResult, ProofStep, PublishResult, QInvariant, Receipt,
+    ReceiptError, RefusalCategory, RefusalInfo, RefusalReason, RefusalReceipt, ReplayPointer,
+    Sigma, StateSnapshot, Triple, TriplePattern, TypeCheckResult, TypeSchema,
 };
 pub use port::{
-    BoundedWriter, CommitResult, DeadlockReport, DeterministicOrderer, GuardEvaluator,
-    InvariantVerificationError, InvariantVerifier, IssueSeverity, ReceiptBuilder, ReceiptStorage,
-    SoundnessIssue, SoundnessReport, TypeChecker, WorkflowAnalyzer, WorkflowError, WorkflowKernel,
-    WorkflowResult, WriteError,
+    ArtifactPublisher, BoundedWriter, CommitResult, CompilationStats, DeadlockReport,
+    DeterministicOrderer, DslCompiler, DslCompilerError, DslCompilerResult, DslCompilerWithStats,
+    GuardEvaluator, InvariantVerificationError, InvariantVerifier, IssueSeverity,
+    MerkleReceiptStorage, PersistentMerkleBackend, ReceiptBuilder, ReceiptStorage, SoundnessIssue,
+    SoundnessReport, TypeChecker, WorkflowAnalyzer, WorkflowError, WorkflowKernel, WorkflowResult,
+    WriteError,
 };
 
 pub use adapter::{
-    Construct8Writer, EvaluationContext, GuardEvaluationError, HGuardEvaluatorAdapter,
-    InMemoryReceiptStorage, InMemoryWorkflowKernel, InMemoryWriter, LambdaOrderer,
-    LambdaOrdererConfig, LocalSigner, QInvariantVerifier, SigmaTypeChecker, Signer,
-    StandardReceiptBuilder, TypeCheckError,
+    BpmnCompiler, Construct8Writer, EvaluationContext, GuardEvaluationError,
+    HGuardEvaluatorAdapter, InMemoryBackend, InMemoryMerkleStorage, InMemoryReceiptStorage,
+    InMemoryWorkflowKernel, InMemoryWriter, LambdaOrderer, LambdaOrdererConfig, LocalSigner,
+    PersistentMerkleStorage, QInvariantVerifier, SigmaTypeChecker, Signer, StandardReceiptBuilder,
+    TypeCheckError,
 };
 
-pub use application::{Compiler, CompilerConfig};
+pub use application::{
+    AppError, CompileRequest, CompileResponse, Compiler, CompilerConfig, ErrorResponse,
+    PipelineState, PipelineStats, compile, health_check,
+};
 
 #[cfg(feature = "kms")]
 pub use adapter::{KmsConfig, KmsSigner};
@@ -68,25 +78,42 @@ pub use adapter::{KmsConfig, KmsSigner};
 #[cfg(feature = "storage")]
 pub use adapter::{CloudStorageConfig, CloudStorageReceiptStorage};
 
+#[cfg(feature = "gcs")]
+pub use adapter::{GcsConfig, GcsReceiptStorage};
+
+#[cfg(feature = "firestore")]
+pub use adapter::FirestoreStateStore;
+
+#[cfg(feature = "workspace-publisher")]
+pub use adapter::{GoogleWorkspacePublisher, WorkspacePublisherConfig};
+
 /// Prelude module for convenient imports.
 pub mod prelude {
     pub use crate::adapter::{
-        Construct8Writer, EvaluationContext, GuardEvaluationError, HGuardEvaluatorAdapter,
-        InMemoryReceiptStorage, InMemoryWorkflowKernel, InMemoryWriter, LambdaOrderer,
-        LambdaOrdererConfig, LocalSigner, QInvariantVerifier, SigmaTypeChecker, Signer,
+        BpmnCompiler, Construct8Writer, EvaluationContext, GuardEvaluationError,
+        HGuardEvaluatorAdapter, InMemoryBackend, InMemoryMerkleStorage, InMemoryReceiptStorage,
+        InMemoryWorkflowKernel, InMemoryWriter, LambdaOrderer, LambdaOrdererConfig, LocalSigner,
+        PersistentMerkleStorage, QInvariantVerifier, SigmaTypeChecker, Signer,
         StandardReceiptBuilder, TypeCheckError,
     };
     pub use crate::domain::{
-        Commit, CommitVerificationResult, ComparisonOperator, DependencyRelation, GuardCondition,
-        GuardEvaluationResult, HGuard, InvariantCheckResult, InvariantPredicate, InvariantSeverity,
-        MAX_MUTATION_UNITS, Operation, OperationKind, OperationResult, OrderingError, Packet,
-        PacketType, Patch, PatchError, PatchSet, PreservationResult, QInvariant, Receipt,
-        ReceiptError, RefusalCategory, RefusalInfo, RefusalReason, RefusalReceipt, ReplayPointer,
-        Sigma, StateSnapshot, Triple, TriplePattern, TypeCheckResult, TypeSchema,
+        Artifact, ArtifactPublishError, Commit, CommitVerificationResult, ComparisonOperator,
+        DependencyRelation, DslBoundaryEventType, DslCompensation, DslCondition, DslElement,
+        DslEndResult, DslEventTrigger, DslFlow, DslGatewayType, DslIntermediateEventType,
+        DslLoopConfig, DslLoopType, DslServiceImplementation, DslTaskType, DslVariable,
+        DslWorkflow, GuardCondition, GuardEvaluationResult, HGuard, InvariantCheckResult,
+        InvariantPredicate, InvariantSeverity, MAX_MUTATION_UNITS, MerkleError, MerkleNode,
+        MerkleProof, MerkleRoot, MerkleTree, Operation, OperationKind, OperationResult,
+        OrderingError, Packet, PacketType, Patch, PatchError, PatchSet, PreservationResult,
+        ProofStep, PublishResult, QInvariant, Receipt, ReceiptError, RefusalCategory, RefusalInfo,
+        RefusalReason, RefusalReceipt, ReplayPointer, Sigma, StateSnapshot, Triple, TriplePattern,
+        TypeCheckResult, TypeSchema,
     };
     pub use crate::port::{
-        BoundedWriter, CommitResult, DeadlockReport, DeterministicOrderer, GuardEvaluator,
-        InvariantVerificationError, InvariantVerifier, IssueSeverity, ReceiptBuilder,
+        ArtifactPublisher, BoundedWriter, CommitResult, CompilationStats, DeadlockReport,
+        DeterministicOrderer, DslCompiler, DslCompilerError, DslCompilerResult,
+        DslCompilerWithStats, GuardEvaluator, InvariantVerificationError, InvariantVerifier,
+        IssueSeverity, MerkleReceiptStorage, PersistentMerkleBackend, ReceiptBuilder,
         ReceiptStorage, SoundnessIssue, SoundnessReport, TypeChecker, WorkflowAnalyzer,
         WorkflowError, WorkflowKernel, WorkflowResult, WriteError,
     };
@@ -96,4 +123,13 @@ pub mod prelude {
 
     #[cfg(feature = "storage")]
     pub use crate::adapter::{CloudStorageConfig, CloudStorageReceiptStorage};
+
+    #[cfg(feature = "gcs")]
+    pub use crate::adapter::{GcsConfig, GcsReceiptStorage};
+
+    #[cfg(feature = "firestore")]
+    pub use crate::adapter::FirestoreStateStore;
+
+    #[cfg(feature = "workspace-publisher")]
+    pub use crate::adapter::{GoogleWorkspacePublisher, WorkspacePublisherConfig};
 }

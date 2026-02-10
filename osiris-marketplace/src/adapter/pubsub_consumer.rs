@@ -110,7 +110,10 @@ impl EventConsumer for PubSubConsumer {
                                         }
                                     }
                                     Err(e) => {
-                                        error!("Handler failed for message {}: {}", message.message_id, e);
+                                        error!(
+                                            "Handler failed for message {}: {}",
+                                            message.message_id, e
+                                        );
                                         // Don't acknowledge failed messages - they'll be redelivered
                                     }
                                 }

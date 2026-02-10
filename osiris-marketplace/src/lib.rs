@@ -5,17 +5,19 @@
 //!
 //! - Consume entitlement events from Partner Pub/Sub topic
 //! - Approve account resources via Partner Procurement API
+//! - Report operation usage to Cloud Service Control for billing
 //!
 //! ## Architecture
 //!
-//! - `domain/` - Core types for entitlements, accounts, and events
-//! - `port/` - Trait definitions for EventConsumer and AccountApprover
-//! - `adapter/` - Implementations using google-cloud-pubsub and reqwest
+//! - `domain/` - Core types for entitlements, accounts, events, and usage tracking
+//! - `port/` - Trait definitions for EventConsumer, AccountApprover, and UsageReporter
+//! - `adapter/` - Implementations using google-cloud-pubsub, reqwest, and google-servicecontrol1
 //!
 //! ## Feature Flags
 //!
 //! - `pubsub` - Enable Google Cloud Pub/Sub consumer adapter
 //! - `procurement-api` - Enable Procurement API client adapter
+//! - `service-control` - Enable Cloud Service Control usage reporter adapter
 //! - `full` - Enable all features
 //!
 //! ## Example
@@ -67,11 +69,15 @@ pub mod port;
 // Re-export commonly used types
 pub use domain::{
     Account, AccountState, ApproveAccountRequest, Entitlement, EntitlementEvent,
-    EntitlementEventType, PubSubMessage,
+    EntitlementEventType, MetricType, OperationType, OperationUsage, PubSubMessage, UsageMetric,
+    UsageReport,
 };
 
 // Re-export port traits
-pub use port::{AccountApprover, AccountApproverError, EventConsumer, EventConsumerError};
+pub use port::{
+    AccountApprover, AccountApproverError, EventConsumer, EventConsumerError, UsageReporter,
+    UsageReporterError,
+};
 
 // Re-export application types
-pub use application::{MarketplaceEventHandler, MarketplaceService};
+pub use application::{MarketplaceEventHandler, MarketplaceService, UsageTrackingHandler};

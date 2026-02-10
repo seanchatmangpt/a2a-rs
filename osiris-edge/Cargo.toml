@@ -13,7 +13,7 @@ categories = ["network-programming", "web-programming::http-server"]
 [dependencies]
 # Workspace dependencies
 a2a-rs = { path = "../a2a-rs", features = ["full"] }
-a2a-mcp = { path = "../a2a-mcp" }
+# a2a-mcp = { path = "../a2a-mcp" }  # Temporarily disabled
 
 # Core dependencies
 serde = { version = "1.0", features = ["derive"] }
@@ -26,6 +26,7 @@ sha2 = "0.10"
 
 # Async runtime
 tokio = { version = "1.32", features = ["rt", "rt-multi-thread", "macros", "net", "io-util", "sync", "time", "signal"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
 async-trait = "0.1"
 futures = "0.3"
 
@@ -49,6 +50,7 @@ reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-feature
 [dev-dependencies]
 # Testing
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+rand = "0.8"
 
 [features]
 default = []

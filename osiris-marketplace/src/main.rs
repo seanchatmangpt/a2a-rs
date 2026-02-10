@@ -6,18 +6,18 @@
 //! - Exposes health check endpoint for Cloud Run
 
 use axum::{
+    Router,
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Json},
     routing::get,
-    Router,
 };
 use serde::Serialize;
 use std::sync::Arc;
 use tokio::signal;
 use tower_http::trace::TraceLayer;
 use tracing::{error, info};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[cfg(all(feature = "pubsub", feature = "procurement-api"))]
 use osiris_marketplace::{
@@ -161,9 +161,9 @@ async fn run_marketplace_service(
 
     // Create Procurement API client
     // In production, use Application Default Credentials or Workload Identity
-    let access_token = config.access_token.clone().ok_or_else(|| {
-        "PROCUREMENT_API_TOKEN must be set (or use Application Default Credentials)"
-    })?;
+    let access_token = config.access_token.clone().ok_or_else(
+        || "PROCUREMENT_API_TOKEN must be set (or use Application Default Credentials)",
+    )?;
 
     let approver = Arc::new(ProcurementApiClient::new(
         config.project_id.clone(),

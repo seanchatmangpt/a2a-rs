@@ -31,8 +31,7 @@ use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
     response::{
-        IntoResponse,
-        Response,
+        IntoResponse, Response,
         sse::{Event, KeepAlive, Sse},
     },
     routing::{get, post},
@@ -202,10 +201,18 @@ impl<H: McpMessageHandler + 'static> StreamableHttpServer<H> {
 
         let listener = tokio::net::TcpListener::bind(&self.state.config.address)
             .await
-            .map_err(|e| Error::Server(format!("Failed to bind to {}: {}", self.state.config.address, e)))?;
+            .map_err(|e| {
+                Error::Server(format!(
+                    "Failed to bind to {}: {}",
+                    self.state.config.address, e
+                ))
+            })?;
 
         #[cfg(feature = "tracing")]
-        info!("MCP Streamable HTTP server listening on {}", self.state.config.address);
+        info!(
+            "MCP Streamable HTTP server listening on {}",
+            self.state.config.address
+        );
 
         axum::serve(listener, app)
             .await
@@ -230,7 +237,10 @@ fn validate_origin(headers: &HeaderMap, allowed_origins: &[String]) -> Result<()
     match origin {
         Some(origin_str) => {
             // Check if origin is in allowed list
-            if allowed_origins.iter().any(|allowed| origin_str.starts_with(allowed)) {
+            if allowed_origins
+                .iter()
+                .any(|allowed| origin_str.starts_with(allowed))
+            {
                 Ok(())
             } else {
                 #[cfg(feature = "tracing")]
@@ -315,7 +325,9 @@ async fn handle_post_request<H: McpMessageHandler>(
             let mut headers = HeaderMap::new();
             headers.insert(
                 "mcp-session-id",
-                session_id.parse().unwrap_or_else(|_| "invalid".parse().unwrap()),
+                session_id
+                    .parse()
+                    .unwrap_or_else(|_| "invalid".parse().unwrap()),
             );
 
             (StatusCode::OK, headers, Json(response)).into_response()
@@ -397,7 +409,8 @@ async fn handle_sse_stream<H: McpMessageHandler>(
             let string_tx = tx.clone();
 
             // Create a typed response channel that converts to JSON strings
-            let (response_tx, mut response_rx) = mpsc::channel::<McpResponse>(state.config.max_buffer_size);
+            let (response_tx, mut response_rx) =
+                mpsc::channel::<McpResponse>(state.config.max_buffer_size);
 
             // Spawn a task to convert McpResponse to JSON strings
             tokio::spawn(async move {
@@ -421,11 +434,7 @@ async fn handle_sse_stream<H: McpMessageHandler>(
     }
 
     // Create SSE stream
-    let stream = ReceiverStream::new(rx).map(|msg| {
-        Event::default()
-            .data(msg)
-            .event("message")
-    });
+    let stream = ReceiverStream::new(rx).map(|msg| Event::default().data(msg).event("message"));
 
     let sse = if state.config.sse_keep_alive {
         Sse::new(stream).keep_alive(
@@ -446,7 +455,10 @@ async fn handle_sse_stream<H: McpMessageHandler>(
         sessions.remove(&session_id_cleanup);
 
         #[cfg(feature = "tracing")]
-        debug!("SSE stream ended, session cleaned up: {}", session_id_cleanup);
+        debug!(
+            "SSE stream ended, session cleaned up: {}",
+            session_id_cleanup
+        );
     });
 
     sse.into_response()

@@ -7,7 +7,7 @@ use crate::port::{AccountApprover, AccountApproverError, AccountApproverResult};
 #[cfg(feature = "procurement-api")]
 use async_trait::async_trait;
 #[cfg(feature = "procurement-api")]
-use reqwest::{header, Client, StatusCode};
+use reqwest::{Client, StatusCode, header};
 #[cfg(feature = "procurement-api")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "procurement-api")]
@@ -72,9 +72,7 @@ impl ProcurementApiClient {
     /// # Returns
     ///
     /// A new ProcurementApiClient instance with automatically obtained credentials
-    pub async fn with_default_credentials(
-        _project_id: String,
-    ) -> AccountApproverResult<Self> {
+    pub async fn with_default_credentials(_project_id: String) -> AccountApproverResult<Self> {
         // In production, this would use google-auth crate or similar
         // For now, we'll require explicit token
         Err(AccountApproverError::AuthenticationError(
@@ -94,10 +92,7 @@ impl ProcurementApiClient {
     }
 
     /// Make a GET request to the API
-    async fn get<T: for<'de> Deserialize<'de>>(
-        &self,
-        path: &str,
-    ) -> AccountApproverResult<T> {
+    async fn get<T: for<'de> Deserialize<'de>>(&self, path: &str) -> AccountApproverResult<T> {
         let url = format!("{}{}", API_BASE_URL, path);
         debug!("GET {}", url);
 
@@ -117,14 +112,10 @@ impl ProcurementApiClient {
                     .map_err(|e| AccountApproverError::ParseError(e.to_string()))?;
                 Ok(body)
             }
-            StatusCode::NOT_FOUND => {
-                Err(AccountApproverError::NotFound(path.to_string()))
-            }
-            StatusCode::TOO_MANY_REQUESTS => {
-                Err(AccountApproverError::RateLimitError(
-                    "API rate limit exceeded".to_string(),
-                ))
-            }
+            StatusCode::NOT_FOUND => Err(AccountApproverError::NotFound(path.to_string())),
+            StatusCode::TOO_MANY_REQUESTS => Err(AccountApproverError::RateLimitError(
+                "API rate limit exceeded".to_string(),
+            )),
             status => {
                 let error_text = response
                     .text()
@@ -164,9 +155,7 @@ impl ProcurementApiClient {
                     .map_err(|e| AccountApproverError::ParseError(e.to_string()))?;
                 Ok(body)
             }
-            StatusCode::NOT_FOUND => {
-                Err(AccountApproverError::NotFound(path.to_string()))
-            }
+            StatusCode::NOT_FOUND => Err(AccountApproverError::NotFound(path.to_string())),
             StatusCode::BAD_REQUEST => {
                 let error_text = response
                     .text()
@@ -174,11 +163,9 @@ impl ProcurementApiClient {
                     .unwrap_or_else(|_| "Bad request".to_string());
                 Err(AccountApproverError::InvalidState(error_text))
             }
-            StatusCode::TOO_MANY_REQUESTS => {
-                Err(AccountApproverError::RateLimitError(
-                    "API rate limit exceeded".to_string(),
-                ))
-            }
+            StatusCode::TOO_MANY_REQUESTS => Err(AccountApproverError::RateLimitError(
+                "API rate limit exceeded".to_string(),
+            )),
             status => {
                 let error_text = response
                     .text()
@@ -270,20 +257,16 @@ mod tests {
 
     #[test]
     fn test_client_creation() {
-        let client = ProcurementApiClient::new(
-            "test-project".to_string(),
-            "test-token".to_string(),
-        );
+        let client =
+            ProcurementApiClient::new("test-project".to_string(), "test-token".to_string());
         assert!(client.is_ok());
     }
 
     #[test]
     fn test_auth_headers() {
-        let client = ProcurementApiClient::new(
-            "test-project".to_string(),
-            "test-token".to_string(),
-        )
-        .unwrap();
+        let client =
+            ProcurementApiClient::new("test-project".to_string(), "test-token".to_string())
+                .unwrap();
 
         let headers = client.auth_headers();
         assert!(headers.contains_key(header::AUTHORIZATION));

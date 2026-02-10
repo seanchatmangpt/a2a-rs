@@ -8,5 +8,10 @@
 //! The application layer implements the high-level compiler logic μ: O → A.
 
 pub mod compiler;
+pub mod http_handlers;
 
 pub use compiler::{Compiler, CompilerConfig};
+pub use http_handlers::{
+    AppError, CompileRequest, CompileResponse, ErrorResponse, PipelineState, PipelineStats,
+    compile, health_check,
+};

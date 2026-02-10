@@ -35,23 +35,13 @@ pub mod adapter;
 pub mod application;
 pub mod domain;
 pub mod error;
+pub mod message;
 pub mod port;
+pub mod server;
+pub mod transport;
 
-/*
-mod message;
-mod transport;
-mod client;
-mod server;
-mod util;
 #[cfg(test)]
 mod tests;
-
-// Re-export key components
-pub use client::A2aRmcpClient;
-pub use server::RmcpA2aServer;
-pub use adapter::{AgentToToolAdapter, ToolToAgentAdapter};
-pub use message::MessageConverter;
-*/
 
 // Re-export error types
 pub use error::{Error, Result};
@@ -63,13 +53,23 @@ pub use domain::{
 };
 
 // Re-export port traits
-pub use port::{McpTaskManager, SessionManager, mcp_task_error, mcp_task_error_with_data};
+pub use port::{
+    McpTaskManager, OriginValidator, SessionManager, mcp_task_error, mcp_task_error_with_data,
+};
 
 // Re-export adapter implementations
-pub use adapter::{InMemorySessionManager, TaskWrapper};
+pub use adapter::{
+    AgentToToolAdapter, InMemorySessionManager, OriginGuard, TaskWrapper, ToolToAgentAdapter,
+};
+
+// Re-export message converter
+pub use message::MessageConverter;
 
 // Re-export application components
 pub use application::{JsonRpcRequest, JsonRpcResponse, McpTaskHandler};
+
+// Re-export server components
+pub use server::{RequestContext, RmcpA2aServer, StreamableHttpServer};
 
 // Version information
 /// Current crate version

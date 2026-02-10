@@ -1,22 +1,22 @@
 //! Server that exposes RMCP tools as an A2A agent
 
-use crate::adapter::{ToolToAgentAdapter, SseManager, SseManagerConfig, AxumSseStream};
+use crate::adapter::{AxumSseStream, SseManager, SseManagerConfig, ToolToAgentAdapter};
 use crate::error::{Error, Result};
 use crate::transport::rmcp_to_a2a::RmcpToA2aTransport;
 use a2a_rs::{AgentCard, Message, Part, Task, TaskState, TaskStatus};
+use axum::{
+    Json, Router,
+    extract::State,
+    http::HeaderMap,
+    response::sse::Sse,
+    routing::{get, post},
+};
 use rmcp::{Server as RmcpServer, ToolCall, ToolResponse};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
-use axum::{
-    routing::{get, post},
-    Router, Json,
-    extract::State,
-    response::sse::Sse,
-    http::HeaderMap,
-};
-use serde::{Deserialize, Serialize};
-use tracing::{info, debug, error};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 // Shared application state
@@ -124,9 +124,11 @@ async fn handle_task_send(
     Json(request): Json<TaskSendRequest>,
 ) -> Result<Json<TaskSendResponse>> {
     // Create new task or update existing task
-    let task_id = request.task_id.unwrap_or_else(|| Uuid::new_v4().to_string());
+    let task_id = request
+        .task_id
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
     let message = request.message;
-    
+
     // For new tasks, create entry in the task store
     let mut tasks = state.tasks.lock().unwrap();
     if !tasks.contains_key(&task_id) {
@@ -150,19 +152,20 @@ async fn handle_task_send(
             task.status.message = Some("Processing input".to_string());
         }
     }
-    
+
     let task = tasks.get(&task_id).unwrap().clone();
     drop(tasks);
-    
+
     // Process task with RMCP tools
     process_task(&state, &task_id).await?;
-    
+
     // Return the updated task
     let tasks = state.tasks.lock().unwrap();
-    let updated_task = tasks.get(&task_id)
+    let updated_task = tasks
+        .get(&task_id)
         .ok_or_else(|| Error::TaskNotFound(task_id.clone()))?
         .clone();
-    
+
     Ok(Json(TaskSendResponse { task: updated_task }))
 }
 
@@ -172,7 +175,9 @@ async fn handle_task_send_subscribe(
     Json(request): Json<TaskSendRequest>,
 ) -> Result<Sse<AxumSseStream>> {
     // Create new task or update existing task
-    let task_id = request.task_id.unwrap_or_else(|| Uuid::new_v4().to_string());
+    let task_id = request
+        .task_id
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
     let message = request.message;
 
     info!("Setting up SSE stream for task: {}", task_id);
@@ -207,9 +212,10 @@ async fn handle_task_send_subscribe(
         tasks.insert(task_id.clone(), task.clone());
 
         // Publish initial task state to SSE stream
-        let task_data = serde_json::to_value(&task)
-            .map_err(|e| Error::Json(e))?;
-        state.sse_manager.publish(&task_id, "task.created", task_data)?;
+        let task_data = serde_json::to_value(&task).map_err(|e| Error::Json(e))?;
+        state
+            .sse_manager
+            .publish(&task_id, "task.created", task_data)?;
     } else {
         // Add message to existing task
         if let Some(task) = tasks.get_mut(&task_id) {
@@ -218,9 +224,10 @@ async fn handle_task_send_subscribe(
             task.status.message = Some("Processing input".to_string());
 
             // Publish update to SSE stream
-            let task_data = serde_json::to_value(&task)
-                .map_err(|e| Error::Json(e))?;
-            state.sse_manager.publish(&task_id, "task.updated", task_data)?;
+            let task_data = serde_json::to_value(&task).map_err(|e| Error::Json(e))?;
+            state
+                .sse_manager
+                .publish(&task_id, "task.updated", task_data)?;
         }
     }
     drop(tasks);
@@ -239,12 +246,16 @@ async fn handle_task_send_subscribe(
                 "error": e.to_string(),
                 "taskId": task_id_clone,
             });
-            let _ = state_clone.sse_manager.publish(&task_id_clone, "task.error", error_data);
+            let _ = state_clone
+                .sse_manager
+                .publish(&task_id_clone, "task.error", error_data);
         }
     });
 
     // Subscribe to SSE stream with optional resume
-    let stream = state.sse_manager.subscribe(&task_id, last_event_id.as_deref())?;
+    let stream = state
+        .sse_manager
+        .subscribe(&task_id, last_event_id.as_deref())?;
     let axum_stream = AxumSseStream::new(stream);
 
     Ok(Sse::new(axum_stream))
@@ -255,10 +266,11 @@ async fn handle_task_get(
     Json(request): Json<TaskGetRequest>,
 ) -> Result<Json<Task>> {
     let tasks = state.tasks.lock().unwrap();
-    let task = tasks.get(&request.task_id)
+    let task = tasks
+        .get(&request.task_id)
         .ok_or_else(|| Error::TaskNotFound(request.task_id.clone()))?
         .clone();
-    
+
     Ok(Json(task))
 }
 
@@ -267,13 +279,16 @@ async fn process_task(state: &AppState, task_id: &str) -> Result<()> {
     // Get the task
     let task = {
         let tasks = state.tasks.lock().unwrap();
-        tasks.get(task_id)
+        tasks
+            .get(task_id)
             .ok_or_else(|| Error::TaskNotFound(task_id.to_string()))?
             .clone()
     };
 
     // Extract the last user message
-    let last_message = task.messages.iter()
+    let last_message = task
+        .messages
+        .iter()
         .filter(|msg| msg.role == "user")
         .last()
         .ok_or_else(|| Error::TaskProcessing("No user message found".into()))?;
@@ -297,18 +312,19 @@ async fn process_task(state: &AppState, task_id: &str) -> Result<()> {
     };
 
     debug!("Calling RMCP tool: {}", tool_name);
-    let tool_response = state.rmcp_server.call_tool(tool_call).await
+    let tool_response = state
+        .rmcp_server
+        .call_tool(tool_call)
+        .await
         .map_err(|e| Error::RmcpToolCall(format!("Error calling tool {}: {}", tool_name, e)))?;
 
     // Create agent response message
     let agent_message = Message {
         role: "agent".to_string(),
-        parts: vec![
-            Part::Data {
-                data: tool_response.result.clone(),
-                mime_type: Some("application/json".to_string()),
-            },
-        ],
+        parts: vec![Part::Data {
+            data: tool_response.result.clone(),
+            mime_type: Some("application/json".to_string()),
+        }],
     };
 
     // Update task with response
@@ -330,7 +346,8 @@ async fn process_task_with_streaming(state: &AppState, task_id: &str) -> Result<
     // Get the task
     let task = {
         let tasks = state.tasks.lock().unwrap();
-        tasks.get(task_id)
+        tasks
+            .get(task_id)
             .ok_or_else(|| Error::TaskNotFound(task_id.to_string()))?
             .clone()
     };
@@ -341,10 +358,14 @@ async fn process_task_with_streaming(state: &AppState, task_id: &str) -> Result<
         "state": "working",
         "message": "Processing task",
     });
-    state.sse_manager.publish(task_id, "task.status", status_data)?;
+    state
+        .sse_manager
+        .publish(task_id, "task.status", status_data)?;
 
     // Extract the last user message
-    let last_message = task.messages.iter()
+    let last_message = task
+        .messages
+        .iter()
         .filter(|msg| msg.role == "user")
         .last()
         .ok_or_else(|| Error::TaskProcessing("No user message found".into()))?;
@@ -368,7 +389,9 @@ async fn process_task_with_streaming(state: &AppState, task_id: &str) -> Result<
         "message": format!("Calling tool: {}", tool_name),
         "tool": tool_name,
     });
-    state.sse_manager.publish(task_id, "task.status", tool_status_data)?;
+    state
+        .sse_manager
+        .publish(task_id, "task.status", tool_status_data)?;
 
     // Call RMCP tool
     let tool_call = ToolCall {
@@ -377,7 +400,10 @@ async fn process_task_with_streaming(state: &AppState, task_id: &str) -> Result<
     };
 
     debug!("Calling RMCP tool: {}", tool_name);
-    let tool_response = state.rmcp_server.call_tool(tool_call).await
+    let tool_response = state
+        .rmcp_server
+        .call_tool(tool_call)
+        .await
         .map_err(|e| Error::RmcpToolCall(format!("Error calling tool {}: {}", tool_name, e)))?;
 
     // Publish tool response event
@@ -386,17 +412,17 @@ async fn process_task_with_streaming(state: &AppState, task_id: &str) -> Result<
         "tool": tool_name,
         "result": tool_response.result,
     });
-    state.sse_manager.publish(task_id, "tool.response", tool_response_data)?;
+    state
+        .sse_manager
+        .publish(task_id, "tool.response", tool_response_data)?;
 
     // Create agent response message
     let agent_message = Message {
         role: "agent".to_string(),
-        parts: vec![
-            Part::Data {
-                data: tool_response.result.clone(),
-                mime_type: Some("application/json".to_string()),
-            },
-        ],
+        parts: vec![Part::Data {
+            data: tool_response.result.clone(),
+            mime_type: Some("application/json".to_string()),
+        }],
     };
 
     // Update task with response
@@ -413,9 +439,10 @@ async fn process_task_with_streaming(state: &AppState, task_id: &str) -> Result<
     };
 
     // Publish final task completion event
-    let completion_data = serde_json::to_value(&updated_task)
-        .map_err(|e| Error::Json(e))?;
-    state.sse_manager.publish(task_id, "task.completed", completion_data)?;
+    let completion_data = serde_json::to_value(&updated_task).map_err(|e| Error::Json(e))?;
+    state
+        .sse_manager
+        .publish(task_id, "task.completed", completion_data)?;
 
     info!("Task {} completed successfully", task_id);
     Ok(())

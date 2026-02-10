@@ -131,7 +131,7 @@ pub enum ActivityImplementation {
 
 /// Gateway patterns for control flow.
 ///
-/// Based on van der Aalst's control flow patterns.
+/// Based on van der Aalst's control flow patterns (1-20).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "patternType", rename_all = "camelCase")]
 pub enum GatewayPattern {
@@ -174,6 +174,51 @@ pub enum GatewayPattern {
     /// Waits for first incoming path, ignores rest
     #[serde(rename_all = "camelCase")]
     StructuredDiscriminator { reset_after: Option<NodeId> },
+
+    /// Pattern 10: Arbitrary Cycles
+    /// Allows loops and arbitrary cycle structures
+    #[serde(rename_all = "camelCase")]
+    ArbitraryCycle { back_edge_to: NodeId },
+
+    /// Pattern 11: Implicit Termination
+    /// Terminates when no more enabled nodes exist
+    #[serde(rename_all = "camelCase")]
+    ImplicitTermination,
+
+    /// Pattern 15: Deferred Choice (OR-join with external choice)
+    /// Dynamic choice determined by which event occurs first
+    #[serde(rename_all = "camelCase")]
+    DeferredChoice {
+        /// Event-based conditions for deferred choice
+        event_conditions: Vec<Condition>,
+        /// Timeout if no event occurs
+        #[serde(skip_serializing_if = "Option::is_none")]
+        timeout_ms: Option<u64>,
+    },
+
+    /// Pattern 16: Interleaved Parallel Routing (Parallel without full join)
+    /// Parallel paths with no mandatory synchronization
+    #[serde(rename_all = "camelCase")]
+    InterleavedParallelRouting,
+
+    /// Pattern 17: Milestone
+    /// Activity enabled only when a condition becomes true
+    #[serde(rename_all = "camelCase")]
+    Milestone {
+        /// Condition that must be satisfied for enabling
+        condition: String,
+        /// Optional node to monitor for the condition
+        #[serde(skip_serializing_if = "Option::is_none")]
+        monitor_node: Option<NodeId>,
+    },
+
+    /// Pattern 18: Critical Section
+    /// Only one instance/path can execute at a time (mutex-like)
+    #[serde(rename_all = "camelCase")]
+    CriticalSection {
+        /// Unique identifier for the critical section
+        section_id: String,
+    },
 }
 
 /// Condition for gateway evaluation.
@@ -434,6 +479,51 @@ pub struct CloudAuthConfig {
     /// Credentials JSON path
     #[serde(skip_serializing_if = "Option::is_none")]
     pub credentials_path: Option<String>,
+}
+
+/// Pattern 18: Critical Section configuration
+/// Manages mutual exclusion in workflow execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CriticalSectionConfig {
+    /// Section identifier for grouping exclusive activities
+    pub section_id: String,
+    /// Activities in the critical section
+    pub activities: Vec<NodeId>,
+    /// Maximum concurrent instances (typically 1 for mutual exclusion)
+    #[serde(default = "critical_section_default_max")]
+    pub max_concurrent: u32,
+}
+
+fn critical_section_default_max() -> u32 {
+    1
+}
+
+/// Pattern 17: Milestone configuration
+/// Tracks and enables activities based on milestone conditions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MilestoneConfig {
+    /// Milestone identifier
+    pub milestone_id: String,
+    /// Condition that enables the milestone
+    pub condition: String,
+    /// Activities that require this milestone to be active
+    pub dependent_activities: Vec<NodeId>,
+    /// Optional monitoring node that provides the condition
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub monitor_node: Option<NodeId>,
+}
+
+/// Pattern 16: Interleaved execution context
+/// Tracks concurrent execution without full synchronization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterleavedExecutionContext {
+    /// Paths that are concurrently executing
+    pub active_paths: Vec<Vec<NodeId>>,
+    /// No mandatory join point - paths complete independently
+    pub independent_completion: bool,
 }
 
 #[cfg(test)]

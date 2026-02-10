@@ -94,12 +94,13 @@ impl<A: AccountApprover> MarketplaceEventHandler<A> {
             .get_account(&entitlement.account)
             .await?;
 
-        info!("Retrieved account: name={}, state={:?}", account.name, account.state);
+        info!(
+            "Retrieved account: name={}, state={:?}",
+            account.name, account.state
+        );
 
         // If auto-approve is enabled and account is pending, approve it
-        if self.auto_approve
-            && account.state == crate::domain::AccountState::AccountStatePending
-        {
+        if self.auto_approve && account.state == crate::domain::AccountState::AccountStatePending {
             info!("Auto-approving account: {}", account.name);
 
             let request = ApproveAccountRequest::default();

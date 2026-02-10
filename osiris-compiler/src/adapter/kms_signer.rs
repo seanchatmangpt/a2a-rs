@@ -10,6 +10,8 @@ use crate::domain::ReceiptError;
 #[cfg(feature = "kms")]
 use async_trait::async_trait;
 #[cfg(feature = "kms")]
+use base64::engine::{Engine, general_purpose};
+#[cfg(feature = "kms")]
 use google_cloudkms1::{
     CloudKMS,
     api::{AsymmetricSignRequest, AsymmetricSignResponse},
@@ -81,32 +83,37 @@ impl KmsSigner {
     /// Returns error if authentication fails or KMS client cannot be created
     pub async fn new(config: KmsConfig) -> Result<Self, ReceiptError> {
         // Create authenticator
-        let auth = if let Some(key_path) = &config.service_account_key {
-            // Use service account key file
-            let secret = yup_oauth2::read_service_account_key(key_path)
-                .await
-                .map_err(|e| {
-                    ReceiptError::SignatureError(format!(
-                        "Failed to read service account key: {}",
-                        e
-                    ))
-                })?;
-
-            ServiceAccountAuthenticator::builder(secret)
-                .build()
-                .await
-                .map_err(|e| {
-                    ReceiptError::SignatureError(format!("Failed to create authenticator: {}", e))
-                })?
+        let key_path = if let Some(path) = &config.service_account_key {
+            // Use provided service account key file
+            path.clone()
         } else {
-            // Use default credentials (e.g., from metadata server in GCE/GKE)
-            ServiceAccountAuthenticator::builder(yup_oauth2::ServiceAccountKey::default())
-                .build()
-                .await
-                .map_err(|e| {
-                    ReceiptError::SignatureError(format!("Failed to create authenticator: {}", e))
-                })?
+            // Try to load from GOOGLE_APPLICATION_CREDENTIALS environment variable
+            std::env::var("GOOGLE_APPLICATION_CREDENTIALS").map_err(|_| {
+                ReceiptError::SignatureError(
+                    "No service account key provided. Set service_account_key config or \
+                     GOOGLE_APPLICATION_CREDENTIALS environment variable"
+                        .to_string(),
+                )
+            })?
         };
+
+        // Read service account key from file
+        let secret = yup_oauth2::read_service_account_key(&key_path)
+            .await
+            .map_err(|e| {
+                ReceiptError::SignatureError(format!(
+                    "Failed to read service account key from '{}': {}",
+                    key_path, e
+                ))
+            })?;
+
+        // Build authenticator
+        let auth = ServiceAccountAuthenticator::builder(secret)
+            .build()
+            .await
+            .map_err(|e| {
+                ReceiptError::SignatureError(format!("Failed to create authenticator: {}", e))
+            })?;
 
         // Create HTTPS connector
         let https = hyper_rustls::HttpsConnectorBuilder::new()
@@ -120,7 +127,8 @@ impl KmsSigner {
             .build();
 
         // Create KMS hub
-        let hub = CloudKMS::new(hyper::Client::builder().build(https), Arc::new(auth));
+        // Note: CloudKMS expects the authenticator directly, not wrapped in Arc
+        let hub = CloudKMS::new(hyper::Client::builder().build(https), auth);
 
         Ok(Self {
             config,
@@ -168,7 +176,7 @@ impl Signer for KmsSigner {
         // 2. Create asymmetric sign request
         let request = AsymmetricSignRequest {
             digest: Some(google_cloudkms1::api::Digest {
-                sha256: Some(base64::encode(&digest)),
+                sha256: Some(digest.to_vec()),
                 ..Default::default()
             }),
             ..Default::default()
@@ -185,10 +193,11 @@ impl Signer for KmsSigner {
             .map_err(|e| ReceiptError::SignatureError(format!("KMS signing failed: {}", e)))?
             .1;
 
-        // 4. Return the signature
-        result
+        // 4. Return the signature (base64-encoded)
+        let sig_bytes = result
             .signature
-            .ok_or_else(|| ReceiptError::SignatureError("KMS returned no signature".to_string()))
+            .ok_or_else(|| ReceiptError::SignatureError("KMS returned no signature".to_string()))?;
+        Ok(general_purpose::STANDARD.encode(&sig_bytes))
     }
 
     async fn verify(&self, data: &[u8], signature: &str) -> Result<bool, ReceiptError> {

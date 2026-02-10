@@ -41,10 +41,38 @@
 //! ```
 
 pub mod adapter;
+pub mod application;
 pub mod domain;
 pub mod port;
+pub mod services;
 
 // Re-export core types
-pub use adapter::{KanbanWipGate, WorkspaceNormalizer};
-pub use domain::{EventType, PacketContext, PacketPayload, PacketSource, TypedPacket, WipError};
-pub use port::{AsyncWipGate, NormalizationError, PacketNormalizer, WipGate, WipPermit};
+pub use adapter::{
+    // BridgeError, BridgeStatistics, UnifiedBridge,  // Temporarily disabled
+    DynamicPolicyEngine,
+    HierarchicalAuthAdapter,
+    InMemoryTenantManager,
+    InstrumentedWipGate,
+    KanbanWipGate,
+    PathBasedDetector,
+    RealtimeAnalyticsEngine,
+    WorkspaceNormalizer,
+};
+pub use application::{
+    TenantApiState, analytics_health_handler, analytics_snapshot_handler, analytics_sse_handler,
+    analytics_timeseries_handler,
+};
+pub use domain::{
+    AnalyticsSnapshot, Anomaly, AnomalySeverity, AnomalyType, BottleneckSignal, BottleneckType,
+    BridgeConfig, Condition, DetectedProtocol, DetectionMethod, Effect, EventType,
+    HierarchicalIdentity, LittlesLawMetrics, OrganizationId, PacketContext, PacketPayload,
+    PacketSource, PercentileLatency, Permission, Policy, PolicyRule, Protocol, RefusalRules, Role,
+    RoleBinding, Scope, TeamId, TenantConfig, TenantId, TypedPacket, UserId, WipError, WipLimits,
+    WipSnapshot, WorkMetrics,
+};
+pub use port::{
+    AnalyticsConfig, AnalyticsEngine, AsyncWipGate, Decision, EvaluationContext,
+    HierarchicalAuthGate, NormalizationError, PacketNormalizer, PolicyEngine, ProtocolDetector,
+    TenantManager, WipGate, WipPermit,
+};
+// pub use services::{UnifiedServer, UnifiedServerConfig};  // Temporarily disabled

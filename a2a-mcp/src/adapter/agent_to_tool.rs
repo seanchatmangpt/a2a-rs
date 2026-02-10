@@ -2,8 +2,8 @@
 
 use crate::error::{Error, Result};
 use crate::message::MessageConverter;
-use a2a_rs::domain::agent::{AgentCard, Skill};
-use rmcp::{Tool, ToolCall, ToolResponse};
+use a2a_rs::domain::{AgentCard, AgentSkill, Task, TaskState, TaskStatus};
+use rmcp::model::{Tool, ToolCall, ToolResponse};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -42,7 +42,7 @@ impl AgentToToolAdapter {
     }
 
     /// Convert an A2A skill to an RMCP tool
-    fn skill_to_tool(&self, skill: &Skill, agent: &AgentCard, agent_url: &str) -> Tool {
+    fn skill_to_tool(&self, skill: &AgentSkill, agent: &AgentCard, agent_url: &str) -> Tool {
         let tool_name = format!("{}:{}", agent_url, skill.name);
 
         Tool {
@@ -58,15 +58,15 @@ impl AgentToToolAdapter {
         call: &ToolCall,
         agent_card: &AgentCard,
         method: &str,
-    ) -> Result<a2a_rs::domain::task::Task> {
+    ) -> Result<Task> {
         // Create a message from the tool call
         let message = self.converter.tool_call_to_message(call)?;
 
         // Create a task with the message
-        Ok(a2a_rs::domain::task::Task {
+        Ok(Task {
             id: uuid::Uuid::new_v4().to_string(),
-            status: a2a_rs::domain::task::TaskStatus {
-                state: a2a_rs::domain::task::TaskState::Submitted,
+            status: TaskStatus {
+                state: TaskState::Submitted,
                 message: Some("Task submitted from RMCP tool call".to_string()),
             },
             messages: vec![message],
@@ -80,7 +80,7 @@ impl AgentToToolAdapter {
     }
 
     /// Convert A2A task response to RMCP tool response
-    pub fn task_to_tool_response(&self, task: &a2a_rs::domain::task::Task) -> Result<ToolResponse> {
+    pub fn task_to_tool_response(&self, task: &Task) -> Result<ToolResponse> {
         // Extract the last agent message
         let agent_message = self.converter.extract_agent_message(task)?;
 
