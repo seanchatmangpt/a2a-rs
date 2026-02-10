@@ -1,6 +1,6 @@
 //! In-memory implementation of BoundedWriter for testing and development.
 
-use crate::domain::{MAX_MUTATION_UNITS, Patch, PatchSet, Triple};
+use crate::domain::{Patch, PatchSet, Triple, MAX_MUTATION_UNITS};
 use crate::port::{BoundedWriter, CommitResult, WriteError};
 use async_trait::async_trait;
 use std::collections::HashMap;

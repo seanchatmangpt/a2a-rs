@@ -124,7 +124,8 @@ impl<U: UsageReporter> UsageTrackingHandler<U> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{EntitlementEventType, UsageReporterResult};
+    use crate::domain::EntitlementEventType;
+    use crate::port::UsageReporterResult;
     use async_trait::async_trait;
     use chrono::Utc;
 

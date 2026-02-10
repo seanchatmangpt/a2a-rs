@@ -1,0 +1,84 @@
+# Production Environment Configuration
+
+project_id  = "my-prod-project"
+region      = "us-central1"
+environment = "prod"
+
+# High resource allocation for production
+edge_memory             = "2Gi"
+edge_cpu                = "2"
+edge_min_instances      = 2
+edge_max_instances      = 50
+
+compiler_memory         = "4Gi"
+compiler_cpu            = "4"
+compiler_min_instances  = 2
+compiler_max_instances  = 100
+
+marketplace_memory      = "2Gi"
+marketplace_cpu         = "2"
+marketplace_min_instances = 2
+marketplace_max_instances = 30
+
+# Use production release tags
+edge_image_tag        = "v0.1.0"
+compiler_image_tag    = "v0.1.0"
+marketplace_image_tag = "v0.1.0"
+
+# Production networking
+enable_public_ingress  = true
+enable_vpc_connector   = true
+create_custom_network  = true
+enable_load_balancer   = true
+enable_cdn             = true
+
+vpc_connector_min_instances = 3
+vpc_connector_max_instances = 20
+
+# Production monitoring
+enable_tracing  = true
+enable_profiler = true
+log_retention_days = 90
+
+# Production environment variables
+common_env_vars = {
+  ENVIRONMENT = "production"
+  RUST_LOG    = "warn"
+  METRICS_NAMESPACE = "a2a-rs-prod"
+}
+
+edge_env_vars = {
+  LOG_LEVEL           = "warn"
+  ENABLE_METRICS      = "true"
+  ENABLE_TRACING      = "true"
+  WIP_LIMIT_THRESHOLD = "85"
+  RATE_LIMIT_ENABLED  = "true"
+}
+
+compiler_env_vars = {
+  LOG_LEVEL                    = "warn"
+  ENABLE_METRICS               = "true"
+  ENABLE_TRACING               = "true"
+  DETERMINISTIC_ORDERING       = "true"
+  PIPELINE_STAGE_TIMEOUT       = "300"
+  ENABLE_RECEIPT_STORAGE       = "true"
+  ENABLE_GCS_RECEIPT_STORAGE   = "true"
+}
+
+marketplace_env_vars = {
+  LOG_LEVEL                     = "warn"
+  ENABLE_METRICS                = "true"
+  ENABLE_TRACING                = "true"
+  ENABLE_SERVICE_CONTROL        = "true"
+  ENABLE_WORKSPACE_PUBLISHER    = "true"
+  BATCH_REPORTING_ENABLED       = "true"
+}
+
+# Production environment tags
+tags = {
+  "team"        = "a2a-rs"
+  "project"     = "agent-to-agent"
+  "environment" = "prod"
+  "managed_by"  = "terraform"
+  "sla"         = "99.99%"
+}

@@ -72,4 +72,48 @@ pub enum EdgeError {
     /// WIP error
     #[error("WIP error: {0}")]
     Wip(#[from] WipError),
+
+    /// Event bus error
+    #[error("Event bus error: {0}")]
+    EventBus(#[from] EventBusError),
+}
+
+/// Errors that can occur during event bus operations
+#[derive(Debug, Clone, Error)]
+pub enum EventBusError {
+    /// Topic not found
+    #[error("Topic not found: {0}")]
+    TopicNotFound(String),
+
+    /// Failed to create topic
+    #[error("Failed to create topic: {0}")]
+    TopicCreationFailed(String),
+
+    /// Failed to publish message
+    #[error("Failed to publish message: {0}")]
+    PublishFailed(String),
+
+    /// Failed to subscribe to topic
+    #[error("Failed to subscribe to topic: {0}")]
+    SubscriptionFailed(String),
+
+    /// Failed to receive message
+    #[error("Failed to receive message: {0}")]
+    ReceiveError(String),
+
+    /// Configuration error
+    #[error("Configuration error: {0}")]
+    Configuration(String),
+
+    /// Invalid topic name
+    #[error("Invalid topic name: {0}")]
+    InvalidTopicName(String),
+
+    /// Serialization error
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+
+    /// Internal error
+    #[error("Internal error: {0}")]
+    Internal(String),
 }

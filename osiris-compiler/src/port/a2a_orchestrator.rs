@@ -146,7 +146,7 @@ pub trait A2AOrchestratorPort: Send + Sync {
     /// Retrieves detailed error context, logs, or diagnostic information
     /// if available from the remote agent.
     async fn get_failure_details(&self, task: &A2AOrchestrationTask)
-    -> OrchestrationResult<String>;
+        -> OrchestrationResult<String>;
 }
 
 /// Configuration for the A2A orchestrator.

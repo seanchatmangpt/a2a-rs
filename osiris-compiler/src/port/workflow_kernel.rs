@@ -5,7 +5,8 @@
 
 use crate::domain::workflow::{
     CancellationRegion, Edge, EscalationConfig, ExecutionEvent, InstanceState, MultiInstanceConfig,
-    Node, NodeId, WorkflowId, WorkflowInstance, WorkflowPattern,
+    MultiInstanceWithSyncConfig, MultiInstanceWithoutSyncConfig, Node, NodeId, WorkflowId,
+    WorkflowInstance, WorkflowPattern,
 };
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -153,7 +154,7 @@ pub trait WorkflowKernel: Send + Sync {
 
     /// Executes an activity node.
     async fn execute_activity(&mut self, instance_id: &str, node_id: &NodeId)
-    -> WorkflowResult<()>;
+        -> WorkflowResult<()>;
 
     /// Handles an event node.
     async fn handle_event(&mut self, instance_id: &str, node_id: &NodeId) -> WorkflowResult<()>;
@@ -188,6 +189,97 @@ pub trait WorkflowKernel: Send + Sync {
         &mut self,
         instance_id: &str,
         config: &EscalationConfig,
+    ) -> WorkflowResult<()>;
+
+    /// Executes multiple instances without synchronization.
+    ///
+    /// Pattern 21: Multiple Instances without Synchronization
+    async fn execute_multiple_instances_no_sync(
+        &mut self,
+        instance_id: &str,
+        config: &MultiInstanceWithoutSyncConfig,
+    ) -> WorkflowResult<()>;
+
+    /// Executes multiple instances with design-time known cardinality.
+    ///
+    /// Pattern 22: Multiple Instances with a Priori Design-Time Knowledge
+    async fn execute_multiple_instances_design_time(
+        &mut self,
+        instance_id: &str,
+        cardinality: u32,
+        activity_id: &NodeId,
+    ) -> WorkflowResult<()>;
+
+    /// Executes multiple instances with runtime-determined cardinality.
+    ///
+    /// Pattern 23: Multiple Instances with a Priori Runtime Knowledge
+    async fn execute_multiple_instances_runtime(
+        &mut self,
+        instance_id: &str,
+        cardinality_expression: &str,
+        activity_id: &NodeId,
+    ) -> WorkflowResult<()>;
+
+    /// Executes multiple instances with synchronization.
+    ///
+    /// Pattern 24: Multiple Instances with Synchronization
+    async fn execute_multiple_instances_with_sync(
+        &mut self,
+        instance_id: &str,
+        config: &MultiInstanceWithSyncConfig,
+    ) -> WorkflowResult<()>;
+
+    /// Cancels multiple instances when condition is met.
+    ///
+    /// Pattern 25: Cancelling Multiple Instances
+    async fn execute_cancel_multiple_instances(
+        &mut self,
+        instance_id: &str,
+        cancel_condition: &str,
+        target_activities: &[NodeId],
+    ) -> WorkflowResult<()>;
+
+    /// Executes a structured loop.
+    ///
+    /// Pattern 27: Structured Loop
+    async fn execute_structured_loop(
+        &mut self,
+        instance_id: &str,
+        loop_condition: &str,
+        loop_back_node: &NodeId,
+        max_iterations: Option<u32>,
+    ) -> WorkflowResult<()>;
+
+    /// Executes recursive workflow invocation.
+    ///
+    /// Pattern 28: Recursion
+    async fn execute_recursion(
+        &mut self,
+        instance_id: &str,
+        recursive_workflow_id: &WorkflowId,
+        base_condition: &str,
+        recursive_condition: &str,
+        max_depth: Option<u32>,
+    ) -> WorkflowResult<()>;
+
+    /// Executes termination trigger.
+    ///
+    /// Pattern 29: Termination Trigger
+    async fn execute_termination_trigger(
+        &mut self,
+        instance_id: &str,
+        termination_condition: &str,
+    ) -> WorkflowResult<()>;
+
+    /// Executes transient trigger.
+    ///
+    /// Pattern 30: Transient Trigger
+    async fn execute_transient_trigger(
+        &mut self,
+        instance_id: &str,
+        trigger_condition: &str,
+        triggered_activity: &NodeId,
+        timeout_ms: Option<u64>,
     ) -> WorkflowResult<()>;
 
     // -------------------------------------------------------------------------

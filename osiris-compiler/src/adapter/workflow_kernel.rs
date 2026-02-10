@@ -5,7 +5,8 @@
 use crate::domain::workflow::{
     CancellationRegion, CancellationTrigger, Edge, EscalationConfig, ExecutionEvent,
     ExecutionEventType, GatewayPattern, InstanceState, MultiInstanceConfig, MultiInstanceMode,
-    NodeId, NodeKind, WorkflowId, WorkflowInstance, WorkflowPattern,
+    MultiInstanceWithSyncConfig, MultiInstanceWithoutSyncConfig, NodeId, NodeKind, WorkflowId,
+    WorkflowInstance, WorkflowPattern,
 };
 use crate::port::workflow_kernel::{WorkflowError, WorkflowKernel, WorkflowResult};
 use async_trait::async_trait;
@@ -813,6 +814,209 @@ impl WorkflowKernel for InMemoryWorkflowKernel {
                     Vec::new() // Wait for critical section to be free
                 }
             }
+
+            // Pattern 21: Multiple Instances without Synchronization
+            GatewayPattern::MultipleInstancesNoSync { config } => {
+                // Spawn instances without waiting for completion
+                // In real implementation, would create async tasks for each instance
+                outgoing.iter().map(|e| e.to.clone()).collect()
+            }
+
+            // Pattern 22: Multiple Instances with a Priori Design-Time Knowledge
+            GatewayPattern::MultipleInstancesDesignTime {
+                cardinality,
+                activity_id,
+            } => {
+                // Known at design time - create fixed number of instances
+                let mut nodes = Vec::new();
+                for _ in 0..*cardinality {
+                    nodes.push(activity_id.clone());
+                }
+                // Also proceed to normal outgoing edges
+                nodes.extend(outgoing.iter().map(|e| e.to.clone()));
+                nodes
+            }
+
+            // Pattern 23: Multiple Instances with a Priori Runtime Knowledge
+            GatewayPattern::MultipleInstancesRuntime {
+                cardinality_expression,
+                activity_id,
+            } => {
+                // Evaluate expression to determine cardinality at runtime
+                let cardinality = if let Some(value) = instance.context.get(cardinality_expression)
+                {
+                    value.as_u64().unwrap_or(1) as u32
+                } else {
+                    // Try to parse as number in expression
+                    cardinality_expression.parse::<u32>().unwrap_or(1)
+                };
+
+                let mut nodes = Vec::new();
+                for _ in 0..cardinality {
+                    nodes.push(activity_id.clone());
+                }
+                nodes.extend(outgoing.iter().map(|e| e.to.clone()));
+                nodes
+            }
+
+            // Pattern 24: Multiple Instances with Synchronization
+            GatewayPattern::MultipleInstancesWithSync { config } => {
+                // Wait for all instances to complete based on merge strategy
+                let merge_strategy = config.merge_strategy.as_str();
+                let activation_ready = match merge_strategy {
+                    "all_complete" => {
+                        // All incoming paths must have completed
+                        incoming
+                            .iter()
+                            .all(|e| instance.active_nodes.contains(&e.from))
+                    }
+                    "one_complete" => {
+                        // Any one incoming path completion is enough
+                        incoming
+                            .iter()
+                            .any(|e| instance.active_nodes.contains(&e.from))
+                    }
+                    "threshold" => {
+                        // Check threshold percentage
+                        if let Some(threshold) = config.completion_threshold {
+                            let completed = incoming
+                                .iter()
+                                .filter(|e| instance.active_nodes.contains(&e.from))
+                                .count() as u32;
+                            let percentage = (completed * 100) / incoming.len().max(1) as u32;
+                            percentage >= threshold
+                        } else {
+                            false
+                        }
+                    }
+                    _ => incoming
+                        .iter()
+                        .all(|e| instance.active_nodes.contains(&e.from)),
+                };
+
+                if activation_ready {
+                    outgoing.iter().map(|e| e.to.clone()).collect()
+                } else {
+                    Vec::new()
+                }
+            }
+
+            // Pattern 25: Cancelling Multiple Instances
+            GatewayPattern::CancelMultipleInstances {
+                cancel_condition,
+                target_activities,
+            } => {
+                // Proceed if condition is met and cancel targeted instances
+                if self.evaluate_condition(&instance.context, cancel_condition) {
+                    // In real implementation, would cancel target activities
+                    outgoing.iter().map(|e| e.to.clone()).collect()
+                } else {
+                    outgoing.iter().map(|e| e.to.clone()).collect()
+                }
+            }
+
+            // Pattern 26: Dynamic Parallel Split
+            GatewayPattern::DynamicParallelSplit { routing_expression } => {
+                // Determine routes dynamically based on expression
+                // This is a simplified implementation
+                if let Some(routes) = instance.context.get(routing_expression) {
+                    match routes {
+                        serde_json::Value::Array(arr) => arr
+                            .iter()
+                            .filter_map(|v| v.as_str())
+                            .filter_map(|node_str| {
+                                outgoing
+                                    .iter()
+                                    .find(|e| e.to.0 == node_str)
+                                    .map(|e| e.to.clone())
+                            })
+                            .collect(),
+                        _ => outgoing.iter().map(|e| e.to.clone()).collect(),
+                    }
+                } else {
+                    outgoing.iter().map(|e| e.to.clone()).collect()
+                }
+            }
+
+            // Pattern 27: Structured Loop
+            GatewayPattern::StructuredLoop {
+                loop_condition,
+                loop_back_node,
+                max_iterations,
+            } => {
+                // Check if loop should continue
+                let should_loop = self.evaluate_condition(&instance.context, loop_condition);
+                let current_iteration = instance
+                    .context
+                    .get("loop_iteration")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32;
+
+                if should_loop
+                    && max_iterations
+                        .map(|m| current_iteration < m)
+                        .unwrap_or(true)
+                {
+                    vec![loop_back_node.clone()]
+                } else {
+                    outgoing.iter().map(|e| e.to.clone()).collect()
+                }
+            }
+
+            // Pattern 28: Recursion
+            GatewayPattern::Recursion {
+                recursive_workflow_id,
+                base_condition,
+                recursive_condition,
+                max_depth,
+            } => {
+                // Check base condition vs recursive condition
+                let use_base = self.evaluate_condition(&instance.context, base_condition);
+                let use_recursive = self.evaluate_condition(&instance.context, recursive_condition);
+
+                let current_depth = instance
+                    .context
+                    .get("recursion_depth")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32;
+
+                if use_base || max_depth.map(|m| current_depth >= m).unwrap_or(false) {
+                    // Use base case - proceed to outgoing
+                    outgoing.iter().map(|e| e.to.clone()).collect()
+                } else if use_recursive {
+                    // Use recursive case - stay in recursive workflow
+                    vec![] // Would recursively invoke workflow
+                } else {
+                    outgoing.iter().map(|e| e.to.clone()).collect()
+                }
+            }
+
+            // Pattern 29: Termination Trigger
+            GatewayPattern::TerminationTrigger {
+                termination_condition,
+            } => {
+                // If condition is met, terminate the entire workflow
+                if self.evaluate_condition(&instance.context, termination_condition) {
+                    // Would trigger instance termination
+                    Vec::new()
+                } else {
+                    outgoing.iter().map(|e| e.to.clone()).collect()
+                }
+            }
+
+            // Pattern 30: Transient Trigger
+            GatewayPattern::TransientTrigger {
+                trigger_condition,
+                triggered_activity,
+                timeout_ms,
+            } => {
+                // Activate triggered activity if condition is met
+                if self.evaluate_condition(&instance.context, trigger_condition) {
+                    vec![triggered_activity.clone()]
+                } else {
+                    Vec::new()
+                }
+            }
         };
 
         drop(patterns);
@@ -1120,6 +1324,494 @@ impl WorkflowKernel for InMemoryWorkflowKernel {
             event_data,
         )
         .await?;
+
+        Ok(())
+    }
+
+    async fn execute_multiple_instances_no_sync(
+        &mut self,
+        instance_id: &str,
+        config: &MultiInstanceWithoutSyncConfig,
+    ) -> WorkflowResult<()> {
+        // Pattern 21: Multiple Instances without Synchronization
+        // Each instance executes independently, no waiting for completion
+
+        let instances = self.instances.read().await;
+        let instance =
+            instances
+                .get(instance_id)
+                .ok_or_else(|| WorkflowError::InstanceNotFound {
+                    instance_id: instance_id.to_string(),
+                })?;
+
+        // Get the collection from context
+        let collection = instance.context.get(&config.collection).ok_or_else(|| {
+            WorkflowError::ExecutionError {
+                message: format!("Collection variable not found: {}", config.collection),
+            }
+        })?;
+
+        let items = match collection {
+            serde_json::Value::Array(arr) => arr.clone(),
+            _ => {
+                return Err(WorkflowError::ExecutionError {
+                    message: "Collection must be an array".to_string(),
+                });
+            }
+        };
+
+        drop(instances);
+
+        // Record start of multiple instances
+        self.record_event(
+            instance_id,
+            ExecutionEventType::NodeActivated,
+            Some(config.activity_id.clone()),
+            HashMap::from([(
+                "pattern_21_instances".to_string(),
+                serde_json::Value::Number(items.len().into()),
+            )]),
+        )
+        .await?;
+
+        // Spawn instances (in real implementation, would be async)
+        for (index, item) in items.iter().enumerate() {
+            let mut ctx = HashMap::new();
+            ctx.insert(config.item_variable.clone(), item.clone());
+            ctx.insert(
+                "mi_21_index".to_string(),
+                serde_json::Value::Number(index.into()),
+            );
+
+            self.update_context(instance_id, ctx).await?;
+
+            // In real implementation, would spawn async task
+            self.record_event(
+                instance_id,
+                ExecutionEventType::NodeActivated,
+                Some(config.activity_id.clone()),
+                HashMap::from([(
+                    "mi_21_item_index".to_string(),
+                    serde_json::Value::Number(index.into()),
+                )]),
+            )
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn execute_multiple_instances_design_time(
+        &mut self,
+        instance_id: &str,
+        cardinality: u32,
+        activity_id: &NodeId,
+    ) -> WorkflowResult<()> {
+        // Pattern 22: Multiple Instances with a Priori Design-Time Knowledge
+        // Cardinality known at design time
+
+        let mut instances = self.instances.write().await;
+        let instance =
+            instances
+                .get_mut(instance_id)
+                .ok_or_else(|| WorkflowError::InstanceNotFound {
+                    instance_id: instance_id.to_string(),
+                })?;
+
+        // Record design-time MI start
+        let mut event_data = HashMap::new();
+        event_data.insert(
+            "pattern_22_cardinality".to_string(),
+            serde_json::Value::Number(cardinality.into()),
+        );
+
+        drop(instances);
+
+        self.record_event(
+            instance_id,
+            ExecutionEventType::NodeActivated,
+            Some(activity_id.clone()),
+            event_data,
+        )
+        .await?;
+
+        // Create instances with design-time cardinality
+        for i in 0..cardinality {
+            let mut ctx = HashMap::new();
+            ctx.insert(
+                "mi_22_index".to_string(),
+                serde_json::Value::Number(i.into()),
+            );
+            ctx.insert(
+                "mi_22_cardinality".to_string(),
+                serde_json::Value::Number(cardinality.into()),
+            );
+
+            self.update_context(instance_id, ctx).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn execute_multiple_instances_runtime(
+        &mut self,
+        instance_id: &str,
+        cardinality_expression: &str,
+        activity_id: &NodeId,
+    ) -> WorkflowResult<()> {
+        // Pattern 23: Multiple Instances with a Priori Runtime Knowledge
+        // Cardinality determined at runtime
+
+        let instances = self.instances.read().await;
+        let instance =
+            instances
+                .get(instance_id)
+                .ok_or_else(|| WorkflowError::InstanceNotFound {
+                    instance_id: instance_id.to_string(),
+                })?;
+
+        // Evaluate cardinality expression
+        let cardinality = if let Some(value) = instance.context.get(cardinality_expression) {
+            value.as_u64().unwrap_or(1) as u32
+        } else {
+            cardinality_expression.parse::<u32>().unwrap_or(1)
+        };
+
+        drop(instances);
+
+        // Record runtime MI start
+        let mut event_data = HashMap::new();
+        event_data.insert(
+            "pattern_23_cardinality".to_string(),
+            serde_json::Value::Number(cardinality.into()),
+        );
+
+        self.record_event(
+            instance_id,
+            ExecutionEventType::NodeActivated,
+            Some(activity_id.clone()),
+            event_data,
+        )
+        .await?;
+
+        // Create instances with runtime-determined cardinality
+        for i in 0..cardinality {
+            let mut ctx = HashMap::new();
+            ctx.insert(
+                "mi_23_index".to_string(),
+                serde_json::Value::Number(i.into()),
+            );
+            ctx.insert(
+                "mi_23_cardinality".to_string(),
+                serde_json::Value::Number(cardinality.into()),
+            );
+
+            self.update_context(instance_id, ctx).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn execute_multiple_instances_with_sync(
+        &mut self,
+        instance_id: &str,
+        config: &MultiInstanceWithSyncConfig,
+    ) -> WorkflowResult<()> {
+        // Pattern 24: Multiple Instances with Synchronization
+        // Spawns multiple instances and waits for all to complete
+
+        let instances = self.instances.read().await;
+        let instance =
+            instances
+                .get(instance_id)
+                .ok_or_else(|| WorkflowError::InstanceNotFound {
+                    instance_id: instance_id.to_string(),
+                })?;
+
+        // Get collection
+        let collection = instance.context.get(&config.collection).ok_or_else(|| {
+            WorkflowError::ExecutionError {
+                message: format!("Collection variable not found: {}", config.collection),
+            }
+        })?;
+
+        let items = match collection {
+            serde_json::Value::Array(arr) => arr.clone(),
+            _ => {
+                return Err(WorkflowError::ExecutionError {
+                    message: "Collection must be an array".to_string(),
+                });
+            }
+        };
+
+        drop(instances);
+
+        // Record synchronized MI start
+        let mut event_data = HashMap::new();
+        event_data.insert(
+            "pattern_24_instances".to_string(),
+            serde_json::Value::Number(items.len().into()),
+        );
+        event_data.insert(
+            "merge_strategy".to_string(),
+            serde_json::Value::String(config.merge_strategy.clone()),
+        );
+
+        self.record_event(
+            instance_id,
+            ExecutionEventType::NodeActivated,
+            Some(config.activity_id.clone()),
+            event_data,
+        )
+        .await?;
+
+        // Create instances and track them
+        for (index, item) in items.iter().enumerate() {
+            let mut ctx = HashMap::new();
+            ctx.insert(config.item_variable.clone(), item.clone());
+            ctx.insert(
+                "mi_24_index".to_string(),
+                serde_json::Value::Number(index.into()),
+            );
+            ctx.insert(
+                "mi_24_total".to_string(),
+                serde_json::Value::Number(items.len().into()),
+            );
+
+            self.update_context(instance_id, ctx).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn execute_cancel_multiple_instances(
+        &mut self,
+        instance_id: &str,
+        cancel_condition: &str,
+        target_activities: &[NodeId],
+    ) -> WorkflowResult<()> {
+        // Pattern 25: Cancelling Multiple Instances
+        // Cancels all active instances when condition is met
+
+        let mut instances = self.instances.write().await;
+        let instance =
+            instances
+                .get_mut(instance_id)
+                .ok_or_else(|| WorkflowError::InstanceNotFound {
+                    instance_id: instance_id.to_string(),
+                })?;
+
+        // Evaluate cancellation condition
+        let should_cancel = self.evaluate_condition(&instance.context, cancel_condition);
+
+        if should_cancel {
+            // Remove all target activities from active nodes
+            for activity_id in target_activities {
+                instance.active_nodes.remove(activity_id);
+            }
+
+            drop(instances);
+
+            // Record cancellation event
+            self.record_event(
+                instance_id,
+                ExecutionEventType::EventTriggered,
+                None,
+                HashMap::from([(
+                    "pattern_25_cancelled_count".to_string(),
+                    serde_json::Value::Number(target_activities.len().into()),
+                )]),
+            )
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn execute_structured_loop(
+        &mut self,
+        instance_id: &str,
+        loop_condition: &str,
+        loop_back_node: &NodeId,
+        max_iterations: Option<u32>,
+    ) -> WorkflowResult<()> {
+        // Pattern 27: Structured Loop
+        // Enables repeated execution with explicit loop control
+
+        let mut instances = self.instances.write().await;
+        let instance =
+            instances
+                .get_mut(instance_id)
+                .ok_or_else(|| WorkflowError::InstanceNotFound {
+                    instance_id: instance_id.to_string(),
+                })?;
+
+        // Increment loop iteration counter
+        let current_iteration = instance
+            .context
+            .get("loop_iteration")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+
+        let should_loop = self.evaluate_condition(&instance.context, loop_condition)
+            && max_iterations
+                .map(|m| current_iteration < m)
+                .unwrap_or(true);
+
+        instance.context.insert(
+            "loop_iteration".to_string(),
+            serde_json::Value::Number((current_iteration + 1).into()),
+        );
+
+        drop(instances);
+
+        // Record loop execution
+        self.record_event(
+            instance_id,
+            ExecutionEventType::GatewayEvaluated,
+            Some(loop_back_node.clone()),
+            HashMap::from([(
+                "loop_iteration".to_string(),
+                serde_json::Value::Number((current_iteration + 1).into()),
+            )]),
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    async fn execute_recursion(
+        &mut self,
+        instance_id: &str,
+        recursive_workflow_id: &WorkflowId,
+        base_condition: &str,
+        recursive_condition: &str,
+        max_depth: Option<u32>,
+    ) -> WorkflowResult<()> {
+        // Pattern 28: Recursion
+        // Allows recursive invocation of workflow subprocess
+
+        let mut instances = self.instances.write().await;
+        let instance =
+            instances
+                .get_mut(instance_id)
+                .ok_or_else(|| WorkflowError::InstanceNotFound {
+                    instance_id: instance_id.to_string(),
+                })?;
+
+        // Evaluate base vs recursive condition
+        let use_base = self.evaluate_condition(&instance.context, base_condition);
+        let current_depth = instance
+            .context
+            .get("recursion_depth")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+
+        let max_exceeded = max_depth.map(|m| current_depth >= m).unwrap_or(false);
+
+        if use_base || max_exceeded {
+            // Base case reached
+            instance.context.insert(
+                "recursion_status".to_string(),
+                serde_json::Value::String("base_case".to_string()),
+            );
+        } else if self.evaluate_condition(&instance.context, recursive_condition) {
+            // Recursive case - increment depth
+            instance.context.insert(
+                "recursion_depth".to_string(),
+                serde_json::Value::Number((current_depth + 1).into()),
+            );
+            instance.context.insert(
+                "recursion_status".to_string(),
+                serde_json::Value::String("recursive_case".to_string()),
+            );
+        }
+
+        drop(instances);
+
+        // Record recursion event
+        self.record_event(
+            instance_id,
+            ExecutionEventType::GatewayEvaluated,
+            None,
+            HashMap::from([(
+                "recursion_depth".to_string(),
+                serde_json::Value::Number((current_depth + 1).into()),
+            )]),
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    async fn execute_termination_trigger(
+        &mut self,
+        instance_id: &str,
+        termination_condition: &str,
+    ) -> WorkflowResult<()> {
+        // Pattern 29: Termination Trigger
+        // Immediately terminates the entire workflow
+
+        let instances = self.instances.read().await;
+        let instance =
+            instances
+                .get(instance_id)
+                .ok_or_else(|| WorkflowError::InstanceNotFound {
+                    instance_id: instance_id.to_string(),
+                })?;
+
+        let should_terminate = self.evaluate_condition(&instance.context, termination_condition);
+
+        drop(instances);
+
+        if should_terminate {
+            // Terminate the instance
+            self.terminate_instance(instance_id).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn execute_transient_trigger(
+        &mut self,
+        instance_id: &str,
+        trigger_condition: &str,
+        triggered_activity: &NodeId,
+        _timeout_ms: Option<u64>,
+    ) -> WorkflowResult<()> {
+        // Pattern 30: Transient Trigger
+        // Triggers an activity based on a temporary condition
+
+        let instances = self.instances.read().await;
+        let instance =
+            instances
+                .get(instance_id)
+                .ok_or_else(|| WorkflowError::InstanceNotFound {
+                    instance_id: instance_id.to_string(),
+                })?;
+
+        let condition_met = self.evaluate_condition(&instance.context, trigger_condition);
+
+        drop(instances);
+
+        if condition_met {
+            // Activate the triggered activity
+            let mut instances_mut = self.instances.write().await;
+            if let Some(inst) = instances_mut.get_mut(instance_id) {
+                inst.active_nodes.insert(triggered_activity.clone());
+            }
+
+            drop(instances_mut);
+
+            // Record trigger event
+            self.record_event(
+                instance_id,
+                ExecutionEventType::EventTriggered,
+                Some(triggered_activity.clone()),
+                HashMap::new(),
+            )
+            .await?;
+        }
 
         Ok(())
     }
@@ -1760,17 +2452,13 @@ mod tests {
 
         let instance = kernel.get_instance(&instance_id).await.unwrap();
         // Main activity should be interrupted
-        assert!(
-            !instance
-                .active_nodes
-                .contains(&NodeId::new("main_activity"))
-        );
+        assert!(!instance
+            .active_nodes
+            .contains(&NodeId::new("main_activity")));
         // Escalation handler should be active
-        assert!(
-            instance
-                .active_nodes
-                .contains(&NodeId::new("escalation_handler"))
-        );
+        assert!(instance
+            .active_nodes
+            .contains(&NodeId::new("escalation_handler")));
     }
 
     #[tokio::test]
@@ -1825,5 +2513,600 @@ mod tests {
 
         let instance = kernel.get_instance(&instance_id).await.unwrap();
         assert!(instance.context.contains_key("mi_index"));
+    }
+
+    #[tokio::test]
+    async fn test_pattern_21_multiple_instances_no_sync() {
+        let mut kernel = InMemoryWorkflowKernel::new();
+        let workflow_id = WorkflowId::new("pattern-21-wf");
+
+        let pattern = WorkflowPattern {
+            id: workflow_id.clone(),
+            name: "Pattern 21: Multiple Instances without Synchronization".to_string(),
+            description: Some("Test Pattern 21: MI without Sync".to_string()),
+            nodes: HashMap::from([(
+                NodeId::new("activity"),
+                Node {
+                    id: NodeId::new("activity"),
+                    kind: NodeKind::Activity {
+                        name: "Parallel Activity".to_string(),
+                        implementation: ActivityImplementation::Local {
+                            handler: "handler".to_string(),
+                        },
+                    },
+                    config: HashMap::new(),
+                },
+            )]),
+            edges: Vec::new(),
+            start_nodes: vec![NodeId::new("activity")],
+            end_nodes: vec![NodeId::new("activity")],
+            variables: HashMap::new(),
+        };
+
+        kernel.register_pattern(pattern).await.unwrap();
+
+        let mut context = HashMap::new();
+        context.insert("items".to_string(), serde_json::json!(vec!["a", "b", "c"]));
+
+        let instance_id = kernel.start_instance(&workflow_id, context).await.unwrap();
+
+        let config = MultiInstanceWithoutSyncConfig {
+            collection: "items".to_string(),
+            item_variable: "current_item".to_string(),
+            activity_id: NodeId::new("activity"),
+            asynchronous: true,
+        };
+
+        kernel
+            .execute_multiple_instances_no_sync(&instance_id, &config)
+            .await
+            .unwrap();
+
+        let instance = kernel.get_instance(&instance_id).await.unwrap();
+        assert!(instance.context.contains_key("mi_21_index"));
+    }
+
+    #[tokio::test]
+    async fn test_pattern_22_multiple_instances_design_time() {
+        let mut kernel = InMemoryWorkflowKernel::new();
+        let workflow_id = WorkflowId::new("pattern-22-wf");
+
+        let pattern = WorkflowPattern {
+            id: workflow_id.clone(),
+            name: "Pattern 22: Multiple Instances Design-Time".to_string(),
+            description: Some("Test Pattern 22: MI with Design-Time Knowledge".to_string()),
+            nodes: HashMap::from([(
+                NodeId::new("activity"),
+                Node {
+                    id: NodeId::new("activity"),
+                    kind: NodeKind::Activity {
+                        name: "Activity".to_string(),
+                        implementation: ActivityImplementation::Local {
+                            handler: "handler".to_string(),
+                        },
+                    },
+                    config: HashMap::new(),
+                },
+            )]),
+            edges: Vec::new(),
+            start_nodes: vec![NodeId::new("activity")],
+            end_nodes: vec![NodeId::new("activity")],
+            variables: HashMap::new(),
+        };
+
+        kernel.register_pattern(pattern).await.unwrap();
+
+        let instance_id = kernel
+            .start_instance(&workflow_id, HashMap::new())
+            .await
+            .unwrap();
+
+        kernel
+            .execute_multiple_instances_design_time(&instance_id, 5, &NodeId::new("activity"))
+            .await
+            .unwrap();
+
+        let instance = kernel.get_instance(&instance_id).await.unwrap();
+        assert_eq!(
+            instance
+                .context
+                .get("mi_22_cardinality")
+                .and_then(|v| v.as_u64()),
+            Some(5)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pattern_23_multiple_instances_runtime() {
+        let mut kernel = InMemoryWorkflowKernel::new();
+        let workflow_id = WorkflowId::new("pattern-23-wf");
+
+        let pattern = WorkflowPattern {
+            id: workflow_id.clone(),
+            name: "Pattern 23: Multiple Instances Runtime".to_string(),
+            description: Some("Test Pattern 23: MI with Runtime Knowledge".to_string()),
+            nodes: HashMap::from([(
+                NodeId::new("activity"),
+                Node {
+                    id: NodeId::new("activity"),
+                    kind: NodeKind::Activity {
+                        name: "Activity".to_string(),
+                        implementation: ActivityImplementation::Local {
+                            handler: "handler".to_string(),
+                        },
+                    },
+                    config: HashMap::new(),
+                },
+            )]),
+            edges: Vec::new(),
+            start_nodes: vec![NodeId::new("activity")],
+            end_nodes: vec![NodeId::new("activity")],
+            variables: HashMap::new(),
+        };
+
+        kernel.register_pattern(pattern).await.unwrap();
+
+        let mut context = HashMap::new();
+        context.insert("count".to_string(), serde_json::Value::Number(3.into()));
+
+        let instance_id = kernel.start_instance(&workflow_id, context).await.unwrap();
+
+        kernel
+            .execute_multiple_instances_runtime(&instance_id, "count", &NodeId::new("activity"))
+            .await
+            .unwrap();
+
+        let instance = kernel.get_instance(&instance_id).await.unwrap();
+        assert_eq!(
+            instance
+                .context
+                .get("mi_23_cardinality")
+                .and_then(|v| v.as_u64()),
+            Some(3)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pattern_24_multiple_instances_with_sync() {
+        let mut kernel = InMemoryWorkflowKernel::new();
+        let workflow_id = WorkflowId::new("pattern-24-wf");
+
+        let pattern = WorkflowPattern {
+            id: workflow_id.clone(),
+            name: "Pattern 24: Multiple Instances with Synchronization".to_string(),
+            description: Some("Test Pattern 24: MI with Sync".to_string()),
+            nodes: HashMap::from([(
+                NodeId::new("activity"),
+                Node {
+                    id: NodeId::new("activity"),
+                    kind: NodeKind::Activity {
+                        name: "Activity".to_string(),
+                        implementation: ActivityImplementation::Local {
+                            handler: "handler".to_string(),
+                        },
+                    },
+                    config: HashMap::new(),
+                },
+            )]),
+            edges: Vec::new(),
+            start_nodes: vec![NodeId::new("activity")],
+            end_nodes: vec![NodeId::new("activity")],
+            variables: HashMap::new(),
+        };
+
+        kernel.register_pattern(pattern).await.unwrap();
+
+        let mut context = HashMap::new();
+        context.insert("items".to_string(), serde_json::json!(vec!["x", "y"]));
+
+        let instance_id = kernel.start_instance(&workflow_id, context).await.unwrap();
+
+        let config = MultiInstanceWithSyncConfig {
+            collection: "items".to_string(),
+            item_variable: "current_item".to_string(),
+            activity_id: NodeId::new("activity"),
+            completion_condition: None,
+            merge_strategy: "all_complete".to_string(),
+            completion_threshold: None,
+        };
+
+        kernel
+            .execute_multiple_instances_with_sync(&instance_id, &config)
+            .await
+            .unwrap();
+
+        let instance = kernel.get_instance(&instance_id).await.unwrap();
+        assert!(instance.context.contains_key("mi_24_total"));
+    }
+
+    #[tokio::test]
+    async fn test_pattern_25_cancel_multiple_instances() {
+        let mut kernel = InMemoryWorkflowKernel::new();
+        let workflow_id = WorkflowId::new("pattern-25-wf");
+
+        let pattern = WorkflowPattern {
+            id: workflow_id.clone(),
+            name: "Pattern 25: Cancelling Multiple Instances".to_string(),
+            description: Some("Test Pattern 25: Cancel MI".to_string()),
+            nodes: HashMap::from([
+                (
+                    NodeId::new("activity_1"),
+                    Node {
+                        id: NodeId::new("activity_1"),
+                        kind: NodeKind::Activity {
+                            name: "Activity 1".to_string(),
+                            implementation: ActivityImplementation::Local {
+                                handler: "handler_1".to_string(),
+                            },
+                        },
+                        config: HashMap::new(),
+                    },
+                ),
+                (
+                    NodeId::new("activity_2"),
+                    Node {
+                        id: NodeId::new("activity_2"),
+                        kind: NodeKind::Activity {
+                            name: "Activity 2".to_string(),
+                            implementation: ActivityImplementation::Local {
+                                handler: "handler_2".to_string(),
+                            },
+                        },
+                        config: HashMap::new(),
+                    },
+                ),
+            ]),
+            edges: Vec::new(),
+            start_nodes: vec![NodeId::new("activity_1")],
+            end_nodes: vec![NodeId::new("activity_2")],
+            variables: HashMap::new(),
+        };
+
+        kernel.register_pattern(pattern).await.unwrap();
+
+        let instance_id = kernel
+            .start_instance(&workflow_id, HashMap::new())
+            .await
+            .unwrap();
+
+        // Activate both activities
+        {
+            let mut instances = kernel.instances.write().await;
+            if let Some(inst) = instances.get_mut(&instance_id) {
+                inst.active_nodes.insert(NodeId::new("activity_1"));
+                inst.active_nodes.insert(NodeId::new("activity_2"));
+            }
+        }
+
+        // Update context to trigger cancellation
+        let mut context = HashMap::new();
+        context.insert("cancel_flag".to_string(), serde_json::Value::Bool(true));
+        kernel.update_context(&instance_id, context).await.unwrap();
+
+        // Execute cancellation
+        kernel
+            .execute_cancel_multiple_instances(
+                &instance_id,
+                "cancel_flag",
+                &[NodeId::new("activity_1")],
+            )
+            .await
+            .unwrap();
+
+        let instance = kernel.get_instance(&instance_id).await.unwrap();
+        assert!(!instance.active_nodes.contains(&NodeId::new("activity_1")));
+        assert!(instance.active_nodes.contains(&NodeId::new("activity_2")));
+    }
+
+    #[tokio::test]
+    async fn test_pattern_27_structured_loop() {
+        let mut kernel = InMemoryWorkflowKernel::new();
+        let workflow_id = WorkflowId::new("pattern-27-wf");
+
+        let pattern = WorkflowPattern {
+            id: workflow_id.clone(),
+            name: "Pattern 27: Structured Loop".to_string(),
+            description: Some("Test Pattern 27: Loop".to_string()),
+            nodes: HashMap::from([(
+                NodeId::new("loop_body"),
+                Node {
+                    id: NodeId::new("loop_body"),
+                    kind: NodeKind::Activity {
+                        name: "Loop Body".to_string(),
+                        implementation: ActivityImplementation::Local {
+                            handler: "loop_handler".to_string(),
+                        },
+                    },
+                    config: HashMap::new(),
+                },
+            )]),
+            edges: Vec::new(),
+            start_nodes: vec![NodeId::new("loop_body")],
+            end_nodes: vec![NodeId::new("loop_body")],
+            variables: HashMap::new(),
+        };
+
+        kernel.register_pattern(pattern).await.unwrap();
+
+        let mut context = HashMap::new();
+        context.insert("should_loop".to_string(), serde_json::Value::Bool(true));
+
+        let instance_id = kernel.start_instance(&workflow_id, context).await.unwrap();
+
+        // Execute loop
+        kernel
+            .execute_structured_loop(
+                &instance_id,
+                "should_loop",
+                &NodeId::new("loop_body"),
+                Some(10),
+            )
+            .await
+            .unwrap();
+
+        let instance = kernel.get_instance(&instance_id).await.unwrap();
+        assert_eq!(
+            instance
+                .context
+                .get("loop_iteration")
+                .and_then(|v| v.as_u64()),
+            Some(1)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pattern_28_recursion() {
+        let mut kernel = InMemoryWorkflowKernel::new();
+        let workflow_id = WorkflowId::new("pattern-28-wf");
+
+        let pattern = WorkflowPattern {
+            id: workflow_id.clone(),
+            name: "Pattern 28: Recursion".to_string(),
+            description: Some("Test Pattern 28: Recursion".to_string()),
+            nodes: HashMap::from([(
+                NodeId::new("recursive_activity"),
+                Node {
+                    id: NodeId::new("recursive_activity"),
+                    kind: NodeKind::Activity {
+                        name: "Recursive Activity".to_string(),
+                        implementation: ActivityImplementation::Local {
+                            handler: "recursive_handler".to_string(),
+                        },
+                    },
+                    config: HashMap::new(),
+                },
+            )]),
+            edges: Vec::new(),
+            start_nodes: vec![NodeId::new("recursive_activity")],
+            end_nodes: vec![NodeId::new("recursive_activity")],
+            variables: HashMap::new(),
+        };
+
+        kernel.register_pattern(pattern.clone()).await.unwrap();
+
+        let mut context = HashMap::new();
+        context.insert("base_case".to_string(), serde_json::Value::Bool(false));
+
+        let instance_id = kernel.start_instance(&workflow_id, context).await.unwrap();
+
+        // Execute recursion
+        kernel
+            .execute_recursion(
+                &instance_id,
+                &workflow_id,
+                "base_case",
+                "!base_case",
+                Some(5),
+            )
+            .await
+            .unwrap();
+
+        let instance = kernel.get_instance(&instance_id).await.unwrap();
+        assert_eq!(
+            instance
+                .context
+                .get("recursion_status")
+                .and_then(|v| v.as_str()),
+            Some("recursive_case")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pattern_29_termination_trigger() {
+        let mut kernel = InMemoryWorkflowKernel::new();
+        let workflow_id = WorkflowId::new("pattern-29-wf");
+
+        let pattern = WorkflowPattern {
+            id: workflow_id.clone(),
+            name: "Pattern 29: Termination Trigger".to_string(),
+            description: Some("Test Pattern 29: Termination".to_string()),
+            nodes: HashMap::from([(
+                NodeId::new("activity"),
+                Node {
+                    id: NodeId::new("activity"),
+                    kind: NodeKind::Activity {
+                        name: "Activity".to_string(),
+                        implementation: ActivityImplementation::Local {
+                            handler: "handler".to_string(),
+                        },
+                    },
+                    config: HashMap::new(),
+                },
+            )]),
+            edges: Vec::new(),
+            start_nodes: vec![NodeId::new("activity")],
+            end_nodes: vec![NodeId::new("activity")],
+            variables: HashMap::new(),
+        };
+
+        kernel.register_pattern(pattern).await.unwrap();
+
+        let mut context = HashMap::new();
+        context.insert("terminate".to_string(), serde_json::Value::Bool(true));
+
+        let instance_id = kernel.start_instance(&workflow_id, context).await.unwrap();
+
+        // Execute termination trigger
+        kernel
+            .execute_termination_trigger(&instance_id, "terminate")
+            .await
+            .unwrap();
+
+        let instance = kernel.get_instance(&instance_id).await.unwrap();
+        assert_eq!(instance.state, InstanceState::Terminated);
+    }
+
+    #[tokio::test]
+    async fn test_pattern_30_transient_trigger() {
+        let mut kernel = InMemoryWorkflowKernel::new();
+        let workflow_id = WorkflowId::new("pattern-30-wf");
+
+        let pattern = WorkflowPattern {
+            id: workflow_id.clone(),
+            name: "Pattern 30: Transient Trigger".to_string(),
+            description: Some("Test Pattern 30: Transient Trigger".to_string()),
+            nodes: HashMap::from([
+                (
+                    NodeId::new("main_activity"),
+                    Node {
+                        id: NodeId::new("main_activity"),
+                        kind: NodeKind::Activity {
+                            name: "Main Activity".to_string(),
+                            implementation: ActivityImplementation::Local {
+                                handler: "main_handler".to_string(),
+                            },
+                        },
+                        config: HashMap::new(),
+                    },
+                ),
+                (
+                    NodeId::new("triggered_activity"),
+                    Node {
+                        id: NodeId::new("triggered_activity"),
+                        kind: NodeKind::Activity {
+                            name: "Triggered Activity".to_string(),
+                            implementation: ActivityImplementation::Local {
+                                handler: "trigger_handler".to_string(),
+                            },
+                        },
+                        config: HashMap::new(),
+                    },
+                ),
+            ]),
+            edges: Vec::new(),
+            start_nodes: vec![NodeId::new("main_activity")],
+            end_nodes: vec![NodeId::new("triggered_activity")],
+            variables: HashMap::new(),
+        };
+
+        kernel.register_pattern(pattern).await.unwrap();
+
+        let mut context = HashMap::new();
+        context.insert("trigger".to_string(), serde_json::Value::Bool(true));
+
+        let instance_id = kernel.start_instance(&workflow_id, context).await.unwrap();
+
+        // Execute transient trigger
+        kernel
+            .execute_transient_trigger(
+                &instance_id,
+                "trigger",
+                &NodeId::new("triggered_activity"),
+                None,
+            )
+            .await
+            .unwrap();
+
+        let instance = kernel.get_instance(&instance_id).await.unwrap();
+        assert!(instance
+            .active_nodes
+            .contains(&NodeId::new("triggered_activity")));
+    }
+
+    #[tokio::test]
+    async fn test_pattern_26_dynamic_parallel_split() {
+        let mut kernel = InMemoryWorkflowKernel::new();
+        let workflow_id = WorkflowId::new("pattern-26-wf");
+
+        let pattern = WorkflowPattern {
+            id: workflow_id.clone(),
+            name: "Pattern 26: Dynamic Parallel Split".to_string(),
+            description: Some("Test Pattern 26: Dynamic Split".to_string()),
+            nodes: HashMap::from([
+                (
+                    NodeId::new("gateway"),
+                    Node {
+                        id: NodeId::new("gateway"),
+                        kind: NodeKind::Gateway {
+                            pattern: GatewayPattern::DynamicParallelSplit {
+                                routing_expression: "routes".to_string(),
+                            },
+                        },
+                        config: HashMap::new(),
+                    },
+                ),
+                (
+                    NodeId::new("path_a"),
+                    Node {
+                        id: NodeId::new("path_a"),
+                        kind: NodeKind::Activity {
+                            name: "Path A".to_string(),
+                            implementation: ActivityImplementation::Local {
+                                handler: "handler_a".to_string(),
+                            },
+                        },
+                        config: HashMap::new(),
+                    },
+                ),
+                (
+                    NodeId::new("path_b"),
+                    Node {
+                        id: NodeId::new("path_b"),
+                        kind: NodeKind::Activity {
+                            name: "Path B".to_string(),
+                            implementation: ActivityImplementation::Local {
+                                handler: "handler_b".to_string(),
+                            },
+                        },
+                        config: HashMap::new(),
+                    },
+                ),
+            ]),
+            edges: vec![
+                Edge {
+                    from: NodeId::new("gateway"),
+                    to: NodeId::new("path_a"),
+                    condition: None,
+                    label: None,
+                },
+                Edge {
+                    from: NodeId::new("gateway"),
+                    to: NodeId::new("path_b"),
+                    condition: None,
+                    label: None,
+                },
+            ],
+            start_nodes: vec![NodeId::new("gateway")],
+            end_nodes: vec![NodeId::new("path_a"), NodeId::new("path_b")],
+            variables: HashMap::new(),
+        };
+
+        kernel.register_pattern(pattern).await.unwrap();
+
+        let mut context = HashMap::new();
+        context.insert(
+            "routes".to_string(),
+            serde_json::json!(vec!["path_a", "path_b"]),
+        );
+
+        let instance_id = kernel.start_instance(&workflow_id, context).await.unwrap();
+
+        let activated = kernel
+            .execute_gateway(&instance_id, &NodeId::new("gateway"))
+            .await
+            .unwrap();
+
+        assert!(activated.contains(&NodeId::new("path_a")));
+        assert!(activated.contains(&NodeId::new("path_b")));
     }
 }

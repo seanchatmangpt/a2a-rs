@@ -12,6 +12,6 @@ pub mod http_handlers;
 
 pub use compiler::{Compiler, CompilerConfig};
 pub use http_handlers::{
-    AppError, CompileRequest, CompileResponse, ErrorResponse, PipelineState, PipelineStats,
-    compile, health_check,
+    compile, health_check, AppError, CompileRequest, CompileResponse, ErrorResponse, PipelineState,
+    PipelineStats,
 };

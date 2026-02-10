@@ -28,8 +28,7 @@ impl WipPermit for InstrumentedPermit {
             analytics.record_completion(work_id).await;
         });
 
-        // Release inner permit
-        self.inner_permit.release();
+        // Inner permit auto-releases when InstrumentedPermit is dropped
     }
 }
 
@@ -114,8 +113,8 @@ impl InstrumentedWipGate {
             .record_arrival(work_id, work_type.to_string())
             .await;
 
-        // Try to acquire from inner gate
-        match self.inner.try_acquire() {
+        // Try to acquire from inner gate (use async version)
+        match AsyncWipGate::try_acquire(&self.inner).await {
             Ok(permit) => {
                 // Record start (permit acquired)
                 self.analytics.record_start(work_id).await;
@@ -167,8 +166,8 @@ impl InstrumentedWipGate {
             loop {
                 interval.tick().await;
 
-                let current_wip = inner.current();
-                let wip_limit = inner.limit();
+                let current_wip = WipGate::current(&inner);
+                let wip_limit = WipGate::limit(&inner);
 
                 // For now, we don't track individual IDs in the gate
                 // In production, you'd maintain a separate registry of in-progress work IDs
@@ -202,7 +201,7 @@ impl WipGate for InstrumentedWipGate {
                 .await;
         });
 
-        match self.inner.try_acquire() {
+        match WipGate::try_acquire(&self.inner) {
             Ok(permit) => {
                 let analytics = Arc::clone(&self.analytics);
                 tokio::spawn(async move {
@@ -226,11 +225,11 @@ impl WipGate for InstrumentedWipGate {
     }
 
     fn limit(&self) -> usize {
-        self.inner.limit()
+        WipGate::limit(&self.inner)
     }
 
     fn current(&self) -> usize {
-        self.inner.current()
+        WipGate::current(&self.inner)
     }
 }
 
@@ -247,11 +246,11 @@ impl AsyncWipGate for InstrumentedWipGate {
     }
 
     fn limit(&self) -> usize {
-        self.inner.limit()
+        WipGate::limit(&self.inner)
     }
 
     fn current(&self) -> usize {
-        self.inner.current()
+        WipGate::current(&self.inner)
     }
 }
 

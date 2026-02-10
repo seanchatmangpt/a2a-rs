@@ -10,13 +10,13 @@ use crate::domain::ReceiptError;
 #[cfg(feature = "kms")]
 use async_trait::async_trait;
 #[cfg(feature = "kms")]
-use base64::engine::{Engine, general_purpose};
+use base64::engine::{general_purpose, Engine};
 #[cfg(feature = "kms")]
 use google_cloudkms1::{
-    CloudKMS,
     api::{AsymmetricSignRequest, AsymmetricSignResponse},
     hyper::{self, client::HttpConnector},
     hyper_rustls::{self, HttpsConnector},
+    CloudKMS,
 };
 #[cfg(feature = "kms")]
 use sha2::{Digest, Sha256};

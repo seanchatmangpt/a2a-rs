@@ -21,10 +21,10 @@
 //! - `POST /compile` - Compile a single operation through the full pipeline
 
 use axum::{
-    Router,
     routing::{get, post},
+    Router,
 };
-use osiris_compiler::application::{PipelineState, compile, health_check};
+use osiris_compiler::application::{compile, health_check, PipelineState};
 use tracing::info;
 
 #[tokio::main]

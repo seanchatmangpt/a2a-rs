@@ -34,11 +34,19 @@ futures = "0.3"
 axum = { version = "0.7", features = ["macros"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "cors", "compression-full", "timeout"] }
+# tower_governor = "0.2"  # Not available on crates.io
 hyper = { version = "1.0", features = ["full"] }
 
 # Observability
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+opentelemetry = { version = "0.23", optional = true }
+opentelemetry-otlp = { version = "0.16", optional = true, features = ["grpc-tonic", "metrics", "trace"] }
+opentelemetry-jaeger = { version = "0.22", optional = true }
+tracing-opentelemetry = { version = "0.24", optional = true }
+tonic = { version = "0.11", optional = true }
+prometheus = "0.13"
+parking_lot = "0.12"
 
 # Configuration
 dotenvy = "0.15.7"
@@ -47,6 +55,20 @@ dotenvy = "0.15.7"
 jsonwebtoken = "9.3"
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
 
+# Cache (optional)
+redis = { version = "0.26", features = ["aio", "tokio-comp"], optional = true }
+
+# WebSocket transport (optional)
+tokio-tungstenite = { version = "0.21", optional = true }
+
+# Pub/Sub (optional)
+google-cloud-pubsub = { version = "0.21", optional = true }
+
+# BigQuery (optional)
+google-cloud-bigquery = { version = "0.15", optional = true }
+google-cloud-storage = { version = "0.18", optional = true }
+google-cloud-auth = { version = "0.15", optional = true }
+
 [dev-dependencies]
 # Testing
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
@@ -54,6 +76,13 @@ rand = "0.8"
 
 [features]
 default = []
+redis = ["dep:redis"]
+ws = ["tokio-tungstenite"]
+pubsub = ["dep:google-cloud-pubsub"]
+bigquery = ["dep:google-cloud-bigquery", "dep:google-cloud-storage", "dep:google-cloud-auth"]
+otel = ["opentelemetry", "opentelemetry-otlp", "tracing-opentelemetry", "tonic"]
+# otel-gcloud = ["otel", "opentelemetry-gcloud-trace"]  # Dependency not available
+otel-jaeger = ["otel", "opentelemetry-jaeger"]
 
 [[bin]]
 name = "osiris-edge"

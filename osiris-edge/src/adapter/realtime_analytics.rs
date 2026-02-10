@@ -143,6 +143,7 @@ impl RealtimeAnalyticsEngine {
             state_lock
                 .wip_samples
                 .values()
+                .into_iter()
                 .map(|&w| w as f64)
                 .sum::<f64>()
                 / state_lock.wip_samples.len() as f64
@@ -509,8 +510,11 @@ impl AnalyticsEngine for RealtimeAnalyticsEngine {
         let mut state = self.state.write().await;
         if let Some(metrics) = state.work_items.get_mut(&id) {
             metrics.complete();
+            // Clone before dropping the borrow
+            let completed_metrics = metrics.clone();
+            drop(metrics); // Explicitly drop the mutable borrow
             // Move to completed buffer
-            state.completed_buffer.push(metrics.clone());
+            state.completed_buffer.push(completed_metrics);
         }
         // Keep in work_items for queryability (will be evicted later)
     }
@@ -548,6 +552,7 @@ impl AnalyticsEngine for RealtimeAnalyticsEngine {
             "wip" => state
                 .wip_samples
                 .values()
+                .into_iter()
                 .enumerate()
                 .map(|(i, &v)| {
                     let ts = Utc::now().timestamp() - (window_sec as i64) + (i as i64);
@@ -557,6 +562,7 @@ impl AnalyticsEngine for RealtimeAnalyticsEngine {
             "throughput" => state
                 .throughput_history
                 .values()
+                .into_iter()
                 .enumerate()
                 .map(|(i, &v)| {
                     let ts = Utc::now().timestamp() - (window_sec as i64) + (i as i64);

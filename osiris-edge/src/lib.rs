@@ -54,25 +54,50 @@ pub use adapter::{
     InMemoryTenantManager,
     InstrumentedWipGate,
     KanbanWipGate,
+    OpenTelemetryManager,
     PathBasedDetector,
+    PkceAuthenticator,
+    PkceConfig,
+    PrometheusCollector,
     RealtimeAnalyticsEngine,
+    RedisConfig,
+    SpanEvent,
+    SpanHandle,
+    SpanMetrics,
+    TokenBucketRateLimiter,
+    TraceContext,
+    TraceContextInjector,
+    TracingConfig,
+    TracingError,
     WorkspaceNormalizer,
 };
+
+#[cfg(feature = "redis")]
+pub use adapter::RedisCache;
+
+#[cfg(feature = "ws")]
+pub use adapter::WebSocketTransport;
 pub use application::{
-    TenantApiState, analytics_health_handler, analytics_snapshot_handler, analytics_sse_handler,
-    analytics_timeseries_handler,
+    RateLimitErrorResponse, RateLimitMiddlewareConfig, TenantApiState, analytics_health_handler,
+    analytics_snapshot_handler, analytics_sse_handler, analytics_timeseries_handler,
+    error_tracking_middleware, metrics_handler, rate_limit_layer,
+    simple_request_metrics_middleware,
 };
 pub use domain::{
-    AnalyticsSnapshot, Anomaly, AnomalySeverity, AnomalyType, BottleneckSignal, BottleneckType,
-    BridgeConfig, Condition, DetectedProtocol, DetectionMethod, Effect, EventType,
-    HierarchicalIdentity, LittlesLawMetrics, OrganizationId, PacketContext, PacketPayload,
-    PacketSource, PercentileLatency, Permission, Policy, PolicyRule, Protocol, RefusalRules, Role,
-    RoleBinding, Scope, TeamId, TenantConfig, TenantId, TypedPacket, UserId, WipError, WipLimits,
-    WipSnapshot, WorkMetrics,
+    AnalyticsSnapshot, Anomaly, AnomalySeverity, AnomalyType, AuthorizationRequest,
+    AuthorizationResponse, BottleneckSignal, BottleneckType, BridgeConfig, ChallengeMethod,
+    CodeChallenge, CodeVerifier, Condition, DetectedProtocol, DetectionMethod, Effect, EventType,
+    HierarchicalIdentity, LittlesLawMetrics, Oauth2Session, OrganizationId, PacketContext,
+    PacketPayload, PacketSource, PercentileLatency, Permission, Policy, PolicyRule, Protocol,
+    RefreshTokenRequest, RefusalRules, Role, RoleBinding, Scope, TeamId, TenantConfig, TenantId,
+    TokenRequest, TokenResponse, TypedPacket, UserId, WipError, WipLimits, WipSnapshot,
+    WorkMetrics,
 };
 pub use port::{
-    AnalyticsConfig, AnalyticsEngine, AsyncWipGate, Decision, EvaluationContext,
-    HierarchicalAuthGate, NormalizationError, PacketNormalizer, PolicyEngine, ProtocolDetector,
-    TenantManager, WipGate, WipPermit,
+    AnalyticsConfig, AnalyticsEngine, AsyncWipGate, Cache, CacheConfig, CacheError, Decision,
+    EvaluationContext, HierarchicalAuthGate, MetricsCollector, MetricsError, NormalizationError,
+    Oauth2Authenticator, PacketNormalizer, PolicyEngine, ProtocolDetector, RateLimitConfig,
+    RateLimitError, RateLimitResult, RateLimiter, TenantManager, Transport, TransportConfig,
+    TransportError, TransportStatus, WipGate, WipPermit,
 };
 // pub use services::{UnifiedServer, UnifiedServerConfig};  // Temporarily disabled

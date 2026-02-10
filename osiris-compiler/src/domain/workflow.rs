@@ -219,6 +219,109 @@ pub enum GatewayPattern {
         /// Unique identifier for the critical section
         section_id: String,
     },
+
+    /// Pattern 21: Multiple Instances without Synchronization
+    /// Spawns multiple instances that complete independently
+    #[serde(rename_all = "camelCase")]
+    MultipleInstancesNoSync {
+        /// Configuration for multiple instances
+        config: Box<MultiInstanceWithoutSyncConfig>,
+    },
+
+    /// Pattern 22: Multiple Instances with a Priori Design-Time Knowledge
+    /// Cardinality known at design time (static)
+    #[serde(rename_all = "camelCase")]
+    MultipleInstancesDesignTime {
+        /// Number of instances to create
+        cardinality: u32,
+        /// Activity to execute for each instance
+        activity_id: NodeId,
+    },
+
+    /// Pattern 23: Multiple Instances with a Priori Runtime Knowledge
+    /// Cardinality determined at runtime from context
+    #[serde(rename_all = "camelCase")]
+    MultipleInstancesRuntime {
+        /// Expression to evaluate for cardinality
+        cardinality_expression: String,
+        /// Activity to execute for each instance
+        activity_id: NodeId,
+    },
+
+    /// Pattern 24: Multiple Instances with Synchronization
+    /// Spawns multiple instances and waits for all to complete
+    #[serde(rename_all = "camelCase")]
+    MultipleInstancesWithSync {
+        /// Configuration for synchronized multiple instances
+        config: Box<MultiInstanceWithSyncConfig>,
+    },
+
+    /// Pattern 25: Cancelling Multiple Instances
+    /// Cancels all active instances when condition is met
+    #[serde(rename_all = "camelCase")]
+    CancelMultipleInstances {
+        /// Condition triggering cancellation
+        cancel_condition: String,
+        /// Activities to cancel
+        target_activities: Vec<NodeId>,
+    },
+
+    /// Pattern 26: Dynamic Parallel Split
+    /// Routes to multiple nodes determined dynamically at runtime
+    #[serde(rename_all = "camelCase")]
+    DynamicParallelSplit {
+        /// Expression to determine target nodes
+        routing_expression: String,
+    },
+
+    /// Pattern 27: Structured Loop
+    /// Enables repeated execution with explicit loop control
+    #[serde(rename_all = "camelCase")]
+    StructuredLoop {
+        /// Loop condition (expression to evaluate)
+        loop_condition: String,
+        /// Node to loop back to
+        loop_back_node: NodeId,
+        /// Maximum iterations (optional safeguard)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max_iterations: Option<u32>,
+    },
+
+    /// Pattern 28: Recursion
+    /// Allows recursive invocation of workflow subprocess
+    #[serde(rename_all = "camelCase")]
+    Recursion {
+        /// Workflow to recursively invoke
+        recursive_workflow_id: WorkflowId,
+        /// Base condition (recursion termination)
+        base_condition: String,
+        /// Recursive condition
+        recursive_condition: String,
+        /// Maximum recursion depth (safeguard)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max_depth: Option<u32>,
+    },
+
+    /// Pattern 29: Termination Trigger
+    /// Immediately terminates the entire workflow
+    #[serde(rename_all = "camelCase")]
+    TerminationTrigger {
+        /// Condition that triggers termination
+        termination_condition: String,
+    },
+
+    /// Pattern 30: Transient Trigger
+    /// Triggers an activity based on a temporary condition
+    #[serde(rename_all = "camelCase")]
+    TransientTrigger {
+        /// Transient condition that enables the activity
+        trigger_condition: String,
+        /// Activity to trigger
+        triggered_activity: NodeId,
+        /// Optional timeout for the trigger
+        #[serde(skip_serializing_if = "Option::is_none")]
+        timeout_ms: Option<u64>,
+    },
 }
 
 /// Condition for gateway evaluation.
@@ -524,6 +627,44 @@ pub struct InterleavedExecutionContext {
     pub active_paths: Vec<Vec<NodeId>>,
     /// No mandatory join point - paths complete independently
     pub independent_completion: bool,
+}
+
+/// Pattern 21: Multiple Instances without Synchronization configuration
+/// Each instance executes independently without waiting for others
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MultiInstanceWithoutSyncConfig {
+    /// Collection variable containing items to process
+    pub collection: String,
+    /// Variable name for each item in iteration
+    pub item_variable: String,
+    /// Activity to execute for each instance
+    pub activity_id: NodeId,
+    /// Whether to spawn instances asynchronously (fire-and-forget)
+    #[serde(default)]
+    pub asynchronous: bool,
+}
+
+/// Pattern 24: Multiple Instances with Synchronization configuration
+/// Spawns multiple instances and waits for all to complete
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MultiInstanceWithSyncConfig {
+    /// Collection variable containing items to process
+    pub collection: String,
+    /// Variable name for each item in iteration
+    pub item_variable: String,
+    /// Activity to execute for each instance
+    pub activity_id: NodeId,
+    /// Completion condition (all instances must satisfy this)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion_condition: Option<String>,
+    /// Merge strategy: "all_complete", "one_complete", "threshold"
+    #[serde(default)]
+    pub merge_strategy: String,
+    /// Threshold percentage for threshold-based completion (0-100)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion_threshold: Option<u32>,
 }
 
 #[cfg(test)]

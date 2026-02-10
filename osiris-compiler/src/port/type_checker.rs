@@ -26,7 +26,7 @@ pub trait TypeChecker: Send + Sync {
     /// - `TypeCheckResult::TypeNotInSigma` if packet type is not registered
     /// - `TypeCheckResult::SchemaViolation` if payload violates schema
     async fn check(&self, packet: &Packet)
-    -> Result<TypeCheckResult, Box<dyn Error + Send + Sync>>;
+        -> Result<TypeCheckResult, Box<dyn Error + Send + Sync>>;
 
     /// Returns the current type system Σ.
     async fn get_sigma(&self) -> Result<Sigma, Box<dyn Error + Send + Sync>>;

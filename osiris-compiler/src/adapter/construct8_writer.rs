@@ -1,6 +1,6 @@
 //! CONSTRUCT8 bounded writer with pluggable storage backends.
 
-use crate::domain::{MAX_MUTATION_UNITS, Patch, PatchSet, Triple};
+use crate::domain::{Patch, PatchSet, Triple, MAX_MUTATION_UNITS};
 use crate::port::{BoundedWriter, CommitResult, WriteError};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
