@@ -13,27 +13,22 @@
 //!   - `streaming_handler`: Real-time updates
 
 // Business capability ports (focused domain interfaces)
+pub mod admission;
 pub mod authenticator;
+pub mod memory_store;
 pub mod message_handler;
 pub mod notification_manager;
 pub mod streaming_handler;
 pub mod task_manager;
 
 // Re-export business capability interfaces
-pub use authenticator::{AuthContext, AuthContextExtractor, AuthPrincipal, Authenticator};
-
-#[cfg(feature = "auth")]
-pub use authenticator::CompositeAuthenticator;
-
-#[cfg(feature = "server")]
-pub use message_handler::AsyncMessageHandler;
-pub use message_handler::MessageHandler;
-
-#[cfg(feature = "server")]
-pub use notification_manager::AsyncNotificationManager;
-pub use notification_manager::NotificationManager;
-
-#[cfg(feature = "server")]
+pub use admission::{AdmissionController, AsyncAdmissionController};
+pub use authenticator::{
+    AuthContext, AuthContextExtractor, AuthPrincipal, Authenticator, CompositeAuthenticator,
+};
+pub use memory_store::{MemoryEntry, MemoryQuery, MemoryStats, MemoryStore};
+pub use message_handler::{AsyncMessageHandler, MessageHandler};
+pub use notification_manager::{AsyncNotificationManager, NotificationManager};
 pub use streaming_handler::{
     AsyncStreamingHandler, StreamingHandler, Subscriber as StreamingSubscriber, UpdateEvent,
 };

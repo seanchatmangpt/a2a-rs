@@ -1,215 +1,261 @@
 # Rust Implementer Memory
 
-## Key Patterns
+## Key Learnings
 
-### CONSTRUCT System Architecture
-The CONSTRUCT module (`src/construct/`) implements deterministic runtime execution:
-- `runtime/` - Core execution engine (μ function)
-- `ontology/` - State model using BTreeMap for determinism
-- `receipts/` - Cryptographic proof chain
-- `guards/` - Refusal determinism predicates
-- `scheduler.rs` - Deterministic task ordering
+### Workflow Pattern Implementation (2026-02-09)
 
-### Replay Testing Pattern
-For determinism verification, use record-replay pattern:
-1. `ExecutionRecorder` - Captures state snapshots + receipts at each step
-2. `ExecutionReplayer` - Replays operations from recorded state
-3. `StateSnapshot` - Lightweight state representation using BTreeMap for deterministic serialization
-4. Compare outputs bit-for-bit to verify determinism
+Successfully implemented comprehensive workflow pattern completeness checker in `a2a-rs/src/domain/workflow/patterns.rs`:
 
-### Domain Types Don't Derive PartialEq/Eq
-`Task`, `Message`, `Artifact` only derive `Debug, Clone, Serialize, Deserialize` (per domain layer rules).
-For comparison in tests:
-- Serialize to JSON and compare strings (deterministic due to BTreeMap)
-- Don't add `PartialEq`/`Eq` to structs containing domain types
-- Use custom comparison logic when needed
+**Implementation Details:**
+- All 43 workflow patterns from Workflow Patterns Initiative enumerated
+- Used petgraph (v0.6) for directed graph representation
+- Pattern detection via graph topology analysis
+- Property-based tests using proptest proving incompleteness theorem
 
-### Scheduler API (runtime/scheduler.rs)
-The scheduler is named `Scheduler`, not `DeterministicScheduler`:
-- `submit(task)` - Add task to pending queue
-- `next()` - Get next task (deterministic selection)
-- `pending_tasks()` - Get pending task IDs in deterministic order
-- Uses BTreeMap + stable sorting for replay consistency
+**Key Design Decisions:**
+1. **Petgraph integration**: Added as core dependency (not optional) since workflow is domain logic
+2. **Serde compatibility**: All types derive Serialize/Deserialize with camelCase for JSON
+3. **Error handling**: Used thiserror for WorkflowError enum
+4. **Graph operations**: Used Dfs for reachability analysis, not Bfs (works better for cycles)
+5. **Ownership**: Calculate coverage before moving HashSet to avoid borrow-after-move errors
 
-### Receipt Chain Verification
-With `receipts` feature enabled:
-- `Receipt::new(observation, action, delta)` - Create cryptographic receipt
-- `ReceiptChain` - Maintains linked chain with integrity verification
-- `verify_integrity()` - Validates chain hasn't been tampered with
-- Receipts form tamper-proof audit trail for all state transitions
+**Pattern Categories:**
+- BasicControlFlow (5 patterns)
+- AdvancedBranchingAndSynchronization (15 patterns)
+- MultipleInstance (7 patterns)
+- StateBased (3 patterns)
+- CancellationAndCompletion (5 patterns)
+- Iteration (2 patterns)
+- Termination (2 patterns)
+- Trigger (2 patterns)
+- Special (2 patterns)
 
-### Observability System (construct/observability.rs)
-Comprehensive tracing and metrics for CONSTRUCT runtime:
-- `RuntimeMetrics` - Thread-safe atomic counters for all operations (guards, invariants, scheduler, runtime)
-- `ObservabilityContext` - Correlation context with execution_id, policy_epoch, timing
-- `InstrumentedGuard<G>` - Wrapper adding metrics/tracing to any Guard (requires `#[derive(Debug, Clone)]`)
-- `InstrumentedInvariant<I>` - Wrapper adding metrics/tracing to any Invariant (requires `#[derive(Debug, Clone)]`)
-- `MetricsSnapshot` - Point-in-time metrics with calculated rates (rejection rate, failure rate, completion rate)
-- `OperationTiming` - Per-stage timing breakdown with slowest_stage() analysis
-- All behind `tracing` feature flag for zero-cost when disabled
-- Creates structured spans: runtime_execution, runtime_stage, guard_evaluation, invariant_check, scheduler_operation
-- Preserves determinism: metrics are side-effect free, timing is observability-only
+**Tests Included:**
+- Unit tests for all basic patterns (Sequence, ParallelSplit, Synchronization, etc.)
+- Unreachable state detection
+- Dead-end detection
+- Export state (human task) detection
+- Property-based tests proving missing patterns cause incompleteness
+- Property-based tests for analysis consistency
 
-### Receipt Store (Persistent Storage)
-With `sqlx-storage` + `receipts` features enabled:
-- `ReceiptStore` - SQLx-based persistent receipt storage
-- `append(receipt)` - Append receipt with sequence/prev_hash validation
-- `get_chain()` - Retrieve entire chain from database
-- `verify_chain()` - Verify integrity of stored chain
-- `replay_from(seq)` - Replay operations from specific sequence
-- Table: receipts (sequence, timestamp, observation_hash, action_hash, delta_hash, receipt_hash, previous_hash, signature, public_key, metadata)
-- Supports SQLite/PostgreSQL/MySQL via SQLx
-- Auto-runs migrations on creation
+**Common Pitfalls Avoided:**
+- Don't use EdgeRef import if not needed (causes unused import warning)
+- Calculate HashSet.len() before calling into_iter() to avoid move
+- Mark unused variables with underscore prefix in proptest generators
+- Use Direction::Incoming/Outgoing for edge traversal
 
-### SQLx Multi-Backend Pattern
-For storage implementations supporting both Postgres and SQLite:
-- Use conditional pool types: `#[cfg(feature = "postgres")] pool: PgPool` vs `#[cfg(feature = "sqlite")] pool: SqlitePool`
-- Separate `row_to_task` methods with concrete row types (PgRow vs SqliteRow) to satisfy SQLx trait bounds
-- Don't use `impl Row` - it doesn't satisfy ColumnIndex/Decode/Type trait bounds
-- Postgres uses JSONB, SQLite uses TEXT for JSON storage
-- Both use separate CREATE TABLE IF NOT EXISTS blocks with database-specific SQL
+**Files Created:**
+- `/home/user/a2a-rs/a2a-rs/src/domain/workflow/patterns.rs` (main implementation)
+- `/home/user/a2a-rs/a2a-rs/src/domain/workflow/mod.rs` (module exports)
+- `/home/user/a2a-rs/a2a-rs/examples/workflow_pattern_checker.rs` (comprehensive example)
 
-## Project Structure
+**Integration:**
+- Updated `/home/user/a2a-rs/a2a-rs/Cargo.toml` to add petgraph dependency
+- Updated `/home/user/a2a-rs/a2a-rs/src/domain/mod.rs` to export workflow module
 
-### Workspace Layout
-- `a2a-rs/` - Core library (hexagonal architecture)
-- `a2a-agents/` - Example agent implementations
-- `a2a-client/` - Web UI
-- `a2a-ap2/` - Payments extension
-
-### Hexagonal Architecture Layers
+**Proof of Correctness:**
+The property-based tests prove the key theorem:
 ```
-domain/ <- port/ <- adapter/ <- application/ <- services/
-```
-- Domain: Pure types, zero dependencies
-- Port: Async trait definitions
-- Adapter: Implementations (feature-gated)
-- Application: JSON-RPC routing
-- Services: High-level wrappers
-
-### Test Organization
-Tests live in module-specific directories:
-- `src/construct/tests/` - CONSTRUCT module tests
-  - `proptest.rs` - Property-based tests
-  - `compliance.rs` - Spec compliance tests
-  - `replay.rs` - Determinism verification (new)
-- Always add new test files to `mod.rs` with `#[cfg(test)]`
-
-## Common Issues
-
-### BTreeMap vs HashMap
-Always use `BTreeMap` for deterministic ordering in:
-- State snapshots
-- Any data structure used in replay/comparison
-- Collections that need consistent serialization order
-
-### Feature Gates
-- Core types: No feature requirements
-- Receipts: Requires `receipts` feature
-- Signing: Requires `receipts-signing` feature
-- Use `#[cfg(feature = "...")]` for conditional compilation
-
-### Async Runtime Types
-- Runtime module uses sync types (no async in domain)
-- `ExecutionReceipt` is sync and Serialize/Deserialize
-- Port traits use `#[async_trait]` for async operations
-
-## Testing Workflows
-
-### Running Tests
-```bash
-cargo test --all-features           # All tests
-cargo test --all-features replay    # Just replay tests
-cargo test -p a2a-rs                # Core library only
+∀ workflow W: missing_patterns(W) ≠ ∅ ⟹ is_complete(W) = false
 ```
 
-### Running Benchmarks
-```bash
-cargo bench --bench scheduler_bench           # Scheduler benchmarks
-cargo bench --bench a2a_performance           # Core A2A benchmarks
-cargo bench                                   # All benchmarks
-```
+Export states (human intervention) are detected by:
+- StateType::HumanTask markers
+- requires_export flag on WorkflowState
+- Analyzing graph topology for unreachable or incomplete patterns
 
-### Benchmark Organization
-Benchmarks live in `a2a-rs/benches/`:
-- `a2a_performance.rs` - Core protocol operations (messages, tasks, serialization)
-- `scheduler_bench.rs` - Scheduler performance and determinism cost analysis
-- Each benchmark uses criterion with `harness = false` in Cargo.toml
-- Use `black_box()` to prevent compiler optimizations
-- Use `criterion::BatchSize::LargeInput` for expensive setup operations
-- Group related benchmarks with `c.benchmark_group("group_name")`
+## Architecture Patterns
 
-### Benchmark Patterns
-For scheduler benchmarks (`scheduler_bench.rs`):
-- Test at multiple scales: 1k, 10k, 100k operations
-- Compare BTreeMap vs HashMap to quantify determinism cost
-- Use `Throughput::Elements` to measure ops/sec
-- Test stable vs unstable sort to show sort overhead
-- Use `iter_batched` with setup closure for complex scenarios
-- Helper function `generate_tasks(count, num_stations)` creates test data
+- Domain types must have zero external dependencies (petgraph is acceptable for graph data structures)
+- All public domain types derive Debug, Clone, Serialize, Deserialize
+- Use #[serde(rename_all = "camelCase")] for JSON API compatibility
+- Property-based tests prove theorems about domain invariants
 
-### Determinism Testing Checklist
-1. Record execution with state snapshots
-2. Replay on fresh runtime instance
-3. Assert identical receipts (ignore timestamps)
-4. Verify receipt chain integrity
-5. Test scheduler produces same order regardless of insertion order
+### SPARQL CONSTRUCT Query Optimizer (2026-02-09)
 
-### Fuzz Testing
-Located in `a2a-rs/fuzz/` using cargo-fuzz + libFuzzer:
-- `fuzz_targets/station.rs` - Comprehensive station robustness testing
-- Requires nightly Rust (has `rust-toolchain.toml`)
-- Tests all station implementations for panic-freedom
-- Validates guards properly reject invalid inputs with typed refusals
-- Run: `cargo fuzz run station`
-- Corpus in `corpus/station/`, crashes in `artifacts/station/`
-- Key invariants: no panics, all errors return RefusalReceipt, state consistency
+Successfully implemented production-grade SPARQL optimizer for ggen in `ggen-optimizer/`:
 
-## ggen-sync (Code/Ontology Sync)
+**Parser Architecture (nom):**
+- Recursive descent parser for SPARQL CONSTRUCT queries
+- Handles PREFIX, CONSTRUCT, WHERE clauses
+- Supports OPTIONAL, UNION, FILTER, BIND patterns
+- **Critical**: SPARQL allows trailing periods - use `opt(char('.'))` after parsing patterns
+- **Manual loop pattern**: When `separated_list0` doesn't handle edge cases, use:
+  ```rust
+  while let Ok((after_sep, _)) = parse_separator(remaining) {
+      if let Ok((after_item, item)) = parse_item(after_sep) {
+          items.push(item);
+          remaining = after_item;
+      } else {
+          break; // Separator without following item
+      }
+  }
+  ```
 
-### Reverse Sync (Code → Ontology)
-Located in `ggen-sync/src/reverse_sync.rs`:
-- Takes `Vec<SyncDiff>` and `HashMap<String, CodeNode>` as input
-- Generates RDF/Turtle triples for types that exist in code but not in ontology
-- Appends to `ontology/a2a-generated.ttl` (80/20 approach - no reorganization)
-- Maps Rust types to XSD types: String→"string", bool→"boolean", i32→"integer", etc.
-- Handles Option<T> (required=false), Vec<T> (isArray=true), custom types (reference)
-- Uses sophia 0.8 for RDF manipulation
-- Function: `apply_reverse_sync(&[SyncDiff], &HashMap<String, CodeNode>, &Path)`
+**Static Analysis (petgraph):**
+- Dependency graph using `DiGraph<String, ()>` for variable dependencies
+- Connected components via `Dfs` for tensor product decomposition
+- Join graph showing shared variables between patterns
+- Selectivity estimation: fewer variables = more selective (0 vars → 0.01, 3 vars → 0.9)
 
-### Database Migrations (Schema Evolution)
-Located in `ggen-sync/src/migrate.rs` - see [migrations.md](migrations.md) for detailed docs:
-- Detects breaking changes from schema diffs
-- Generates SQLx-compatible migration files for Postgres, MySQL, SQLite
-- Supports up/down migrations with timestamps
-- Key function: `apply_migrations(&[SyncDiff], &HashMap<String, OntologyNode>, DatabaseBackend, &Path)`
-- Breaking changes: type removed, field removed, type changed, required field added
-- Non-breaking: optional field added (Option<T>)
+**Cost Model:**
+- Base operation costs: scan=1.0, join=10.0, filter=0.5, optional=5.0, union=2.0, bind=0.1
+- Cardinality estimation by variable count: 0→1, 1→100, 2→1000, 3→10000
+- Amdahl's law for parallel speedup: `1.0 / ((1.0 - p) + (p / n))` with p=0.8
+- Predicate statistics support via `PredicateStats` struct
 
-### Code Generation (ggen generate)
-Located in `ggen-sync/src/generate.rs`:
-- Integrates SPARQL CONSTRUCT queries with Tera template rendering
-- Loads ggen.toml config with ontology sources, prefixes, rules
-- Uses Oxigraph for RDF storage + SPARQL execution
-- Executes CONSTRUCT queries to transform ontology into intermediate RDF graphs
-- Applies Tera templates to generate Rust code from CONSTRUCT results
-- Returns `GenerationResult` with list of generated files
-- Key functions:
-  - `load_config(path)` - Parse ggen.toml into GgenConfig
-  - `generate(config_path)` - Full generation workflow
-  - `execute_construct(store, query, rule_name)` - Run SPARQL CONSTRUCT
-  - `graph_to_context(triples)` - Convert RDF graph to Tera context
-- Dependencies: toml, tera, oxigraph, serde
-- Important: Oxigraph's `load_from_reader` takes 2 args (format, reader), not 4
-- CONSTRUCT returns Triple iterator (not Quad) via QueryResults::Graph
+**Optimization Passes:**
+1. **Predicate Pushdown**: Move FILTERs into earliest pattern containing all filter variables
+2. **Join Elimination**: Remove OPTIONAL patterns with unused variables
+3. **Subquery Flattening**: Collapse nested Group patterns
+4. **Redundant Elimination**: Remove duplicate triple patterns
+5. **Parallel Decomposition**: Identify independent subqueries (tensor product)
 
-### Type Mapping Pattern
+**Testing Strategy:**
+- Unit tests for each parser combinator
+- Debug programs for position-based error diagnosis
+- Property-based tests would prove optimization correctness (not implemented yet)
+- Doc tests in lib.rs example
+
+**Parser Debugging Pattern:**
 ```rust
-String → a2a:type "string"
-bool → a2a:type "boolean"
-i32/i64/u32/u64 → a2a:type "integer"
-f32/f64 → a2a:type "number"
-Option<T> → a2a:required false + recurse on T
-Vec<T> → a2a:isArray true + recurse on T
-CustomType → a2a:type "reference" + a2a:refEntity "CustomType"
+// Create debug program to show character positions
+println!("Query length: {}", query.len());
+println!("Character at position {}: {:?}", pos, query.chars().nth(pos));
+println!("Context: {:?}", &query[pos-5..pos+5]);
 ```
+
+**Clippy Fixes:**
+- Use `while let` instead of `loop { if let }` (clippy::while_let_loop)
+- Prefix unused parameters with `_` (or mark with `#[allow(dead_code)]`)
+- Remove unused imports aggressively
+
+**Files Created:**
+- `/home/user/a2a-rs/ggen-optimizer/src/lib.rs` (public API)
+- `/home/user/a2a-rs/ggen-optimizer/src/error.rs` (thiserror types)
+- `/home/user/a2a-rs/ggen-optimizer/src/ast.rs` (SPARQL AST)
+- `/home/user/a2a-rs/ggen-optimizer/src/parser.rs` (nom parser)
+- `/home/user/a2a-rs/ggen-optimizer/src/analyzer.rs` (static analysis)
+- `/home/user/a2a-rs/ggen-optimizer/src/cost.rs` (cost model)
+- `/home/user/a2a-rs/ggen-optimizer/src/rewriter.rs` (optimizer)
+- `/home/user/a2a-rs/ggen-optimizer/README.md` (documentation)
+- `/home/user/a2a-rs/ggen-optimizer/Cargo.toml` (dependencies)
+
+**Dependencies:**
+- nom 7.1 for parsing
+- petgraph 0.6 for graph analysis
+- thiserror 2.0 for errors
+- serde 1.0 for serialization
+- indexmap 2.0, rustc-hash 2.0 for collections
+
+**Integration:**
+- Added to workspace in root Cargo.toml
+- Edition 2024, MSRV 1.85
+
+### TPS Coordinator Implementation (2026-02-09)
+
+Successfully implemented autonomous agent coordinator with Toyota Production System principles in `a2a-rs/src/services/coordinator.rs`:
+
+**Core TPS Concepts:**
+- **Kanban Board**: WIP limits per station to prevent overload
+- **Pull Scheduling**: Tasks pulled when capacity available (not pushed)
+- **Andon System**: Real-time status (GREEN/YELLOW/RED) based on utilization
+- **Jidoka**: Automatic halt on quality issues (defect rate threshold)
+- **Heijunka**: Level loading to smooth workflow over time
+- **Takt Time**: Rhythm-based scheduling aligned with demand
+- **Metrics**: Cycle time, throughput, WIP, defect rate tracking
+
+**Key Design Patterns:**
+1. **Async State Management**: `Arc<RwLock<CoordinatorState>>` for shared mutable state
+2. **Background Tasks**: Spawned with `tokio::spawn` for metrics, heijunka, andon monitoring
+3. **Borrow Checker**: Collect data before mutating to avoid multiple mutable borrows
+   ```rust
+   let data: Vec<_> = state.map.iter().map(|(k, v)| (k.clone(), *v)).collect();
+   for (key, val) in data {
+       state.other_map.get_mut(&key); // OK - previous borrow done
+   }
+   ```
+4. **Instant Serialization**: Use `#[serde(skip, default = "Instant::now")]` for `Instant` fields
+5. **Tracing**: Don't use `impl Into<String>` in `#[instrument]` functions - use `&str` instead
+
+**Architecture Decisions:**
+- Lives in services layer (orchestrates AsyncTaskManager port)
+- Public types: Station, AndonStatus, JidokaGate, etc. (all Serialize/Deserialize)
+- Internal types: CoordinatorState, TaskTiming (not serializable)
+- Feature-gated with `server` feature
+
+**Testing:**
+- Unit tests for pure functions (utilization, takt time, heijunka)
+- Integration example with SimpleTaskManager in `examples/tps_coordinator.rs`
+- Comprehensive demonstration of all TPS features
+
+**Common Pitfalls Avoided:**
+- Don't explicitly `drop()` references - causes clippy warnings
+- Don't hold locks across `.await` points (deadlock risk)
+- Don't use `Instant` with Serialize - use skip or chrono
+- Don't forget feature gates on tokio spawns
+
+**Files Created:**
+- `/home/user/a2a-rs/a2a-rs/src/services/coordinator.rs` (main implementation, ~1100 lines)
+- `/home/user/a2a-rs/a2a-rs/examples/tps_coordinator.rs` (comprehensive example)
+
+**Integration:**
+- Updated `/home/user/a2a-rs/a2a-rs/src/services/mod.rs` to export coordinator types
+- Builds successfully with `server` feature
+
+### Cryptographic Receipt Validation System (2026-02-09)
+
+Successfully implemented production-ready cryptographic receipt validation in `a2a-rs/src/services/receipt.rs`:
+
+**Core Components:**
+- **Receipt**: Single cryptographic receipt with ed25519 signature over ontology→output mapping
+- **ReceiptChain**: Blockchain-like chain with hash pointers for immutability
+- **MerkleTree**: Batch verification with O(log n) proofs
+- **ReplayValidator**: Deterministic build verification
+
+**Critical Implementation Details:**
+1. **Merkle Proof Generation**: Must collect bottom-up (leaf→root)
+   - Add sibling hashes AFTER recursing into target subtree
+   - Proof elements are `(hash, is_right_sibling)` tuples for correct positioning
+   - When verifying: if `is_right`, current is left; else current is right
+2. **Ed25519 (dalek v2.1)**:
+   - No `SigningKey::generate()` - use `SigningKey::from_bytes(&seed)` with 32 random bytes
+   - `Signature::from_bytes()` returns `Signature`, not `Result`
+3. **Bon Builder**: Don't use `#[builder(default)]` on `Option<T>` - Option implies `None`
+
+**Feature Gating:**
+- New `crypto` feature with deps: `sha2`, `ed25519-dalek`, `hex`
+- Exports through `services/mod.rs` and `lib.rs` when enabled
+- Added to `full` feature set
+
+**Testing:**
+- Unit tests in receipt.rs (currently blocked by unrelated errors in codebase)
+- Two example programs demonstrate all features:
+  - `receipt_demo.rs`: Comprehensive demo of all features
+  - `receipt_debug.rs`: Debug/trace Merkle proof generation
+
+**Files Created:**
+- `/home/user/a2a-rs/a2a-rs/src/services/receipt.rs` (~600 lines)
+- `/home/user/a2a-rs/a2a-rs/examples/receipt_demo.rs` (comprehensive demo)
+- `/home/user/a2a-rs/a2a-rs/examples/receipt_debug.rs` (debugging tool)
+- `/home/user/a2a-rs/.claude/agent-memory/rust-implementer/receipt-validation.md` (detailed notes)
+
+**Integration:**
+- Updated Cargo.toml with crypto dependencies and feature flag
+- All examples configured with `required-features = ["crypto"]`
+- Compiles cleanly with `cargo check -p a2a-rs --features crypto`
+- Demo runs successfully: `cargo run -p a2a-rs --example receipt_demo --features crypto`
+
+## Next Steps
+
+When building on this implementation:
+1. Consider adding adapter layer for workflow persistence (SQLx storage)
+2. Port trait for workflow execution engine
+3. Visualization adapter (GraphViz export)
+4. BPMN 2.0 import/export adapter
+5. Integrate ggen-optimizer into ggen CLI tool
+6. Add property-based tests proving optimization pass correctness
+7. Add WebSocket/HTTP endpoints for TPS coordinator real-time monitoring
+8. Implement coordinator persistence (save/restore state across restarts)
+9. Add receipt validation middleware for A2A protocol message verification
+10. Implement receipt storage adapter (SQLx-based persistent receipt chain)

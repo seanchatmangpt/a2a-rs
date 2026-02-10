@@ -22,11 +22,7 @@ base64 = "0.21"
 url = { version = "2.4", features = ["serde"] }
 bon = "2.3"
 nom = "7.1"
-
-# Cryptography - optional
-sha2 = { version = "0.10", optional = true }
-hex = { version = "0.4", optional = true }
-ed25519-dalek = { version = "2.1", features = ["serde"], optional = true }
+petgraph = { version = "0.6", features = ["serde-1"] }
 
 # Database - optional
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "chrono", "uuid", "json"], optional = true }
@@ -54,6 +50,11 @@ openidconnect = { version = "3.5", optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"], optional = true }
 
+# Cryptography - optional
+sha2 = { version = "0.10", optional = true }
+ed25519-dalek = { version = "2.1", features = ["serde"], optional = true }
+hex = { version = "0.4", optional = true }
+
 [dev-dependencies]
 # Testing dependencies
 proptest = "1.4"
@@ -73,13 +74,14 @@ http-server = ["server", "dep:axum"]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
 ws-server = ["server", "dep:tokio-tungstenite"]
 auth = ["dep:jsonwebtoken", "dep:oauth2", "dep:openidconnect", "dep:reqwest"]
+crypto = ["dep:sha2", "dep:ed25519-dalek", "dep:hex"]
 sqlx-storage = ["server", "dep:sqlx"]
 sqlite = ["sqlx-storage", "sqlx/sqlite"]
 postgres = ["sqlx-storage", "sqlx/postgres"]
 mysql = ["sqlx-storage", "sqlx/mysql"]
 receipts = ["dep:sha2", "dep:hex"]
 receipts-signing = ["receipts", "dep:ed25519-dalek"]
-full = ["http-client", "ws-client", "http-server", "ws-server", "tracing", "auth", "sqlite", "postgres", "receipts-signing"]
+full = ["http-client", "ws-client", "http-server", "ws-server", "tracing", "auth", "crypto", "sqlite", "postgres", "receipts-signing"]
 
 
 [[example]]
@@ -116,6 +118,21 @@ required-features = ["receipts"]
 name = "ws_station"
 path = "examples/ws_station.rs"
 required-features = ["ws-server", "receipts", "server"]
+
+[[example]]
+name = "firewall_demo"
+path = "examples/firewall_demo.rs"
+required-features = ["server"]
+
+[[example]]
+name = "receipt_demo"
+path = "examples/receipt_demo.rs"
+required-features = ["crypto"]
+
+[[example]]
+name = "receipt_debug"
+path = "examples/receipt_debug.rs"
+required-features = ["crypto"]
 
 [[bench]]
 name = "a2a_performance"

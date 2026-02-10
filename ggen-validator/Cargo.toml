@@ -1,0 +1,36 @@
+[package]
+name = "ggen-validator"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.85"
+description = "SHACL (Shapes Constraint Language) validator for RDF ontologies"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# Error handling
+thiserror = "2.0"
+
+# RDF parsing and querying
+oxigraph = "0.4"
+
+# Async traits
+async-trait = "0.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Regular expressions for pattern constraints
+regex = "1.10"
+
+# Collections
+indexmap = "2.0"
+
+[dev-dependencies]
+# Testing
+proptest = "1.4"
+tokio = { version = "1.37", features = ["rt", "macros"] }
+
+[lib]
+name = "ggen_validator"
+path = "src/lib.rs"
