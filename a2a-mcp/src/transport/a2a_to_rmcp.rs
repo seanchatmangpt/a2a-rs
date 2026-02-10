@@ -3,8 +3,8 @@
 use crate::error::Result;
 use crate::message::MessageConverter;
 use a2a_rs::domain::{message::Message, task::Task};
-use rmcp::{ToolCall, ToolResponse};
 use async_trait::async_trait;
+use rmcp::{ToolCall, ToolResponse};
 use std::sync::Arc;
 
 /// Transport adapter that bridges A2A to RMCP
@@ -19,9 +19,15 @@ impl A2aToRmcpTransport {
     }
 
     /// Convert A2A message to RMCP tool call
-    pub async fn convert_message_to_tool_call(&self, msg: &Message, method: &str) -> Result<ToolCall> {
+    pub async fn convert_message_to_tool_call(
+        &self,
+        msg: &Message,
+        method: &str,
+    ) -> Result<ToolCall> {
         // Extract parameters from message
-        let params = msg.parts.iter()
+        let params = msg
+            .parts
+            .iter()
             .find_map(|part| {
                 if let a2a_rs::domain::message::MessagePart::Data { data, .. } = part {
                     Some(data.clone())
@@ -30,7 +36,7 @@ impl A2aToRmcpTransport {
                 }
             })
             .unwrap_or(serde_json::Value::Null);
-        
+
         Ok(ToolCall {
             method: method.to_string(),
             params,
@@ -40,20 +46,18 @@ impl A2aToRmcpTransport {
     /// Convert RMCP tool response to A2A message
     pub async fn convert_tool_response_to_message(&self, resp: &ToolResponse) -> Result<Message> {
         let mut parts = Vec::new();
-        
+
         // Add data part with response result
-        parts.push(a2a_rs::domain::message::MessagePart::Data { 
+        parts.push(a2a_rs::domain::message::MessagePart::Data {
             data: resp.result.clone(),
             mime_type: Some("application/json".to_string()),
         });
-        
+
         // If the result is a string, also add it as text
         if let serde_json::Value::String(text) = &resp.result {
-            parts.push(a2a_rs::domain::message::MessagePart::Text { 
-                text: text.clone() 
-            });
+            parts.push(a2a_rs::domain::message::MessagePart::Text { text: text.clone() });
         }
-        
+
         Ok(Message {
             role: "agent".to_string(),
             parts,

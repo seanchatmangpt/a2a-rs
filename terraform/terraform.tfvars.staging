@@ -1,0 +1,44 @@
+# Staging Environment Configuration
+
+project_id  = "my-staging-project"
+region      = "us-central1"
+environment = "staging"
+
+# Medium resource allocation for staging
+edge_memory             = "1Gi"
+edge_cpu                = "1"
+edge_min_instances      = 1
+edge_max_instances      = 5
+
+compiler_memory         = "2Gi"
+compiler_cpu            = "2"
+compiler_min_instances  = 1
+compiler_max_instances  = 10
+
+marketplace_memory      = "1Gi"
+marketplace_cpu         = "1"
+marketplace_min_instances = 1
+marketplace_max_instances = 5
+
+# Use specific version tags for staging
+edge_image_tag        = "v0.1.0-staging"
+compiler_image_tag    = "v0.1.0-staging"
+marketplace_image_tag = "v0.1.0-staging"
+
+# Enable public ingress for staging (behind IAM)
+enable_public_ingress = true
+enable_vpc_connector  = true
+create_custom_network = true
+
+# Staging-specific monitoring
+enable_tracing  = true
+enable_profiler = false
+log_retention_days = 30
+
+# Staging environment tags
+tags = {
+  "team"        = "a2a-rs"
+  "project"     = "agent-to-agent"
+  "environment" = "staging"
+  "managed_by"  = "terraform"
+}

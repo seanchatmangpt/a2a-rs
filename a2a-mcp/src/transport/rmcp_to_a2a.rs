@@ -3,8 +3,8 @@
 use crate::error::Result;
 use crate::message::MessageConverter;
 use a2a_rs::domain::{message::Message, task::Task};
-use rmcp::{ClientJsonRpcMessage, ServerJsonRpcMessage};
 use async_trait::async_trait;
+use rmcp::{ClientJsonRpcMessage, ServerJsonRpcMessage};
 use std::sync::Arc;
 
 /// Transport adapter that bridges RMCP to A2A
@@ -21,7 +21,7 @@ impl RmcpToA2aTransport {
     /// Convert RMCP request to A2A task
     pub async fn convert_request(&self, req: &ClientJsonRpcMessage, task_id: &str) -> Result<Task> {
         let message = self.converter.rmcp_to_a2a_request(req)?;
-        
+
         // Create a new task with the converted message
         let task = Task {
             id: task_id.to_string(),
@@ -34,15 +34,19 @@ impl RmcpToA2aTransport {
             history_ttl: Some(3600), // 1 hour default
             metadata: None,
         };
-        
+
         Ok(task)
     }
 
     /// Convert A2A response to RMCP response
-    pub async fn convert_response(&self, task: &Task, id: Option<serde_json::Value>) -> Result<ServerJsonRpcMessage> {
+    pub async fn convert_response(
+        &self,
+        task: &Task,
+        id: Option<serde_json::Value>,
+    ) -> Result<ServerJsonRpcMessage> {
         // Get the last agent message
         let agent_message = self.converter.extract_agent_message(task)?;
-        
+
         // Convert to RMCP response
         self.converter.a2a_to_rmcp_response(agent_message, id)
     }
@@ -52,5 +56,6 @@ impl RmcpToA2aTransport {
 #[async_trait]
 pub trait RmcpToA2aHandler {
     /// Process an RMCP request as an A2A task
-    async fn process_rmcp_request(&self, req: ClientJsonRpcMessage) -> Result<ServerJsonRpcMessage>;
+    async fn process_rmcp_request(&self, req: ClientJsonRpcMessage)
+    -> Result<ServerJsonRpcMessage>;
 }

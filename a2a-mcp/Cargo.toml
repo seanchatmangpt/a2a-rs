@@ -9,12 +9,37 @@ repository = "https://github.com/username/a2a-rs"
 keywords = ["a2a", "rmcp", "ai", "agent", "protocol"]
 categories = ["ai", "network-programming"]
 
-# Simplify for initial implementation
 [dependencies]
-# We'll add more dependencies as needed in the future
+# Core dependencies
 rmcp = { version = "0.1.5" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+thiserror = "2.0"
+
+# Async runtime and utilities
+tokio = { version = "1.43", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures = "0.3"
+async-trait = "0.1"
+
+# HTTP server
+axum = { version = "0.7", features = ["macros"] }
+tower-http = { version = "0.5", features = ["cors"] }
+
+# Utilities
+uuid = { version = "1.11", features = ["v4", "serde"] }
+tracing = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+
+# A2A protocol
+a2a-rs = { path = "../a2a-rs" }
+
+# HTTP client (for examples and tests)
+reqwest = { version = "0.12", features = ["json"], optional = true }
+
+[features]
+default = []
+client = ["reqwest"]
 
 [dev-dependencies]
-# Simple test dependencies for now
+tracing-subscriber = "0.3"
