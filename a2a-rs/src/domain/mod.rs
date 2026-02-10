@@ -5,6 +5,7 @@ pub mod error;
 pub mod events;
 pub mod hooks;
 pub mod protocols;
+pub mod queries;
 #[cfg(test)]
 mod tests;
 pub mod validation;
@@ -27,6 +28,10 @@ pub use error::A2AError;
 pub use events::{TaskArtifactUpdateEvent, TaskStatusUpdateEvent};
 pub use protocols::{
     JSONRPCError, JSONRPCMessage, JSONRPCNotification, JSONRPCRequest, JSONRPCResponse,
+};
+pub use queries::{
+    AgentStatsView, GetAgentStats, GetMessagesByAgent, GetTasksByStatus, MessageListView,
+    TaskListView,
 };
 pub use validation::{Validate, ValidationResult};
 pub use workflow::{

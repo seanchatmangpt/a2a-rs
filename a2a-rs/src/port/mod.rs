@@ -22,10 +22,14 @@ pub mod connection_pool;
 pub mod memory_store;
 pub mod message_handler;
 pub mod message_queue;
+pub mod message_store;
 pub mod metrics_collector;
 pub mod notification_manager;
 pub mod streaming_handler;
 pub mod task_manager;
+
+#[cfg(feature = "compression")]
+pub mod compression;
 
 #[cfg(feature = "zerocopy")]
 pub mod zerocopy_transport;
@@ -42,6 +46,8 @@ pub use connection_pool::{ConnectionPool, PoolConfig, PoolStats};
 pub use memory_store::{MemoryEntry, MemoryQuery, MemoryStats, MemoryStore};
 pub use message_handler::{AsyncMessageHandler, MessageHandler};
 pub use message_queue::{MessageQueue, Priority, QueueMetrics};
+#[cfg(feature = "server")]
+pub use message_store::{MessageQuery, MessageQueryResult, MessageStore};
 pub use metrics_collector::{MetricsCollector, NoopMetricsCollector};
 pub use notification_manager::{AsyncNotificationManager, NotificationManager};
 pub use streaming_handler::{

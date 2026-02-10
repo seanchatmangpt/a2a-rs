@@ -40,6 +40,9 @@ reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-feature
 # WebSocket - optional
 tokio-tungstenite = { version = "0.20", features = ["rustls", "connect", "stream", "handshake"], default-features = false, optional = true }
 
+# gRPC - optional
+tonic = { version = "0.12", optional = true }
+
 # HTTP server - optional
 axum = { version = "0.8", optional = true }
 
@@ -47,6 +50,8 @@ axum = { version = "0.8", optional = true }
 jsonwebtoken = { version = "9.3", optional = true }
 oauth2 = { version = "4.4", optional = true }
 openidconnect = { version = "3.5", optional = true }
+bcrypt = { version = "0.15", optional = true }
+rand = { version = "0.8", optional = true }
 
 # Logging - optional
 tracing = { version = "0.1", optional = true }
@@ -85,6 +90,9 @@ wasm-bindgen-futures = { version = "0.4", optional = true }
 web-sys = { version = "0.3", features = ["WebSocket", "MessageEvent", "ErrorEvent", "CloseEvent", "BinaryType", "Window", "IdbFactory", "IdbDatabase", "IdbObjectStore", "IdbTransaction", "IdbRequest", "IdbOpenDbRequest", "IdbTransactionMode", "IdbCursorWithValue", "IdbKeyRange", "Blob"], optional = true }
 js-sys = { version = "0.3", optional = true }
 
+[build-dependencies]
+tonic-build = { version = "0.12", optional = true }
+
 [dev-dependencies]
 # Testing dependencies
 proptest = "1.4"
@@ -103,7 +111,7 @@ server = ["dep:tokio", "dep:async-trait", "dep:futures"]
 http-server = ["server", "dep:axum"]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
 ws-server = ["server", "dep:tokio-tungstenite"]
-auth = ["dep:jsonwebtoken", "dep:oauth2", "dep:openidconnect", "dep:reqwest"]
+auth = ["dep:jsonwebtoken", "dep:oauth2", "dep:openidconnect", "dep:reqwest", "dep:bcrypt", "dep:rand"]
 crypto = ["dep:sha2", "dep:ed25519-dalek", "dep:hex"]
 sqlx-storage = ["server", "dep:sqlx"]
 sqlite = ["sqlx-storage", "sqlx/sqlite"]
