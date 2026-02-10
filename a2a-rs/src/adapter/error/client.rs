@@ -4,6 +4,9 @@ use crate::domain::A2AError;
 use std::io;
 use thiserror::Error;
 
+#[cfg(feature = "wasm")]
+use wasm_bindgen::JsValue;
+
 /// Error type for HTTP client adapter
 #[derive(Error, Debug)]
 #[cfg(feature = "http-client")]
@@ -58,6 +61,42 @@ pub enum WebSocketClientError {
     Closed,
 }
 
+/// Error type for WASM client adapter
+#[derive(Error, Debug)]
+#[cfg(feature = "wasm")]
+pub enum WasmClientError {
+    #[error("WASM WebSocket connection error: {0}")]
+    Connection(String),
+
+    #[error("WASM WebSocket message error: {0}")]
+    Message(String),
+
+    #[error("WASM WebSocket protocol error: {0}")]
+    Protocol(String),
+
+    #[error("WASM connection timeout")]
+    Timeout,
+
+    #[error("WASM connection closed")]
+    Closed,
+
+    #[error("JavaScript error: {0}")]
+    JsError(String),
+
+    #[error("IndexedDB error: {0}")]
+    IndexedDbError(String),
+
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+}
+
+#[cfg(feature = "wasm")]
+impl From<JsValue> for WasmClientError {
+    fn from(value: JsValue) -> Self {
+        WasmClientError::JsError(format!("{:?}", value))
+    }
+}
+
 // Conversion from adapter errors to domain errors
 #[cfg(feature = "http-client")]
 impl From<HttpClientError> for A2AError {
@@ -93,6 +132,36 @@ impl From<WebSocketClientError> for A2AError {
             WebSocketClientError::Timeout => A2AError::Internal("WebSocket timeout".to_string()),
             WebSocketClientError::Closed => {
                 A2AError::Internal("WebSocket connection closed".to_string())
+            }
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+impl From<WasmClientError> for A2AError {
+    fn from(error: WasmClientError) -> Self {
+        match error {
+            WasmClientError::Connection(msg) => {
+                A2AError::Internal(format!("WASM WebSocket connection error: {}", msg))
+            }
+            WasmClientError::Message(msg) => {
+                A2AError::Internal(format!("WASM WebSocket message error: {}", msg))
+            }
+            WasmClientError::Protocol(msg) => {
+                A2AError::Internal(format!("WASM WebSocket protocol error: {}", msg))
+            }
+            WasmClientError::Timeout => A2AError::Internal("WASM WebSocket timeout".to_string()),
+            WasmClientError::Closed => {
+                A2AError::Internal("WASM WebSocket connection closed".to_string())
+            }
+            WasmClientError::JsError(msg) => {
+                A2AError::Internal(format!("JavaScript error: {}", msg))
+            }
+            WasmClientError::IndexedDbError(msg) => {
+                A2AError::Internal(format!("IndexedDB error: {}", msg))
+            }
+            WasmClientError::SerializationError(msg) => {
+                A2AError::Internal(format!("Serialization error: {}", msg))
             }
         }
     }

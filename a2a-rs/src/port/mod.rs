@@ -21,6 +21,9 @@ pub mod notification_manager;
 pub mod streaming_handler;
 pub mod task_manager;
 
+#[cfg(feature = "zerocopy")]
+pub mod zerocopy_transport;
+
 // Re-export business capability interfaces
 pub use admission::{AdmissionController, AsyncAdmissionController};
 pub use authenticator::{
@@ -33,3 +36,6 @@ pub use streaming_handler::{
     AsyncStreamingHandler, StreamingHandler, Subscriber as StreamingSubscriber, UpdateEvent,
 };
 pub use task_manager::{AsyncTaskManager, TaskManager};
+
+#[cfg(feature = "zerocopy")]
+pub use zerocopy_transport::{BufferStats, ZeroCopyTransport};

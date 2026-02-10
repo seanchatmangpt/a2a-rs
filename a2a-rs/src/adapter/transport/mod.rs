@@ -5,3 +5,6 @@ pub mod http;
 
 #[cfg(any(feature = "ws-client", feature = "ws-server"))]
 pub mod websocket;
+
+#[cfg(feature = "zerocopy")]
+pub mod zerocopy;
