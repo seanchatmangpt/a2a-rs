@@ -3,6 +3,7 @@
 pub mod core;
 pub mod error;
 pub mod events;
+pub mod hooks;
 pub mod protocols;
 #[cfg(test)]
 mod tests;
