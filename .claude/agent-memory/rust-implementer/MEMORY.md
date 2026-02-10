@@ -98,3 +98,26 @@ cargo test -p a2a-rs                # Core library only
 3. Assert identical receipts (ignore timestamps)
 4. Verify receipt chain integrity
 5. Test scheduler produces same order regardless of insertion order
+
+## ggen-sync (Code/Ontology Sync)
+
+### Reverse Sync (Code → Ontology)
+Located in `ggen-sync/src/reverse_sync.rs`:
+- Takes `Vec<SyncDiff>` and `HashMap<String, CodeNode>` as input
+- Generates RDF/Turtle triples for types that exist in code but not in ontology
+- Appends to `ontology/a2a-generated.ttl` (80/20 approach - no reorganization)
+- Maps Rust types to XSD types: String→"string", bool→"boolean", i32→"integer", etc.
+- Handles Option<T> (required=false), Vec<T> (isArray=true), custom types (reference)
+- Uses sophia 0.8 for RDF manipulation
+- Function: `apply_reverse_sync(&[SyncDiff], &HashMap<String, CodeNode>, &Path)`
+
+### Type Mapping Pattern
+```rust
+String → a2a:type "string"
+bool → a2a:type "boolean"
+i32/i64/u32/u64 → a2a:type "integer"
+f32/f64 → a2a:type "number"
+Option<T> → a2a:required false + recurse on T
+Vec<T> → a2a:isArray true + recurse on T
+CustomType → a2a:type "reference" + a2a:refEntity "CustomType"
+```
