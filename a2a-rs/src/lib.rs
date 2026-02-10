@@ -82,21 +82,23 @@ pub mod observability;
 
 // Public API exports
 pub use domain::{
-    A2AError, AgentCapabilities, AgentCard, AgentCardSignature, AgentExtension, AgentInterface,
-    AgentProvider, AgentSkill, Artifact, AuthorizationCodeOAuthFlow, ClientCredentialsOAuthFlow,
-    DeleteTaskPushNotificationConfigParams, FileContent, GetTaskPushNotificationConfigParams,
-    ImplicitOAuthFlow, ListTaskPushNotificationConfigParams, ListTasksParams, ListTasksResult,
-    Message, MessageSendConfiguration, MessageSendParams, OAuthFlows, Part, PasswordOAuthFlow,
-    PushNotificationAuthenticationInfo, PushNotificationConfig, Role, SecurityScheme, Task,
-    TaskArtifactUpdateEvent, TaskIdParams, TaskPushNotificationConfig, TaskQueryParams,
-    TaskSendParams, TaskState, TaskStatus, TaskStatusUpdateEvent, TransportProtocol,
+    A2AError, AdmissionDecision, AgentCapabilities, AgentCard, AgentCardSignature, AgentExtension,
+    AgentInterface, AgentProvider, AgentSkill, Artifact, AuthorizationCodeOAuthFlow,
+    ClientCredentialsOAuthFlow, DeleteTaskPushNotificationConfigParams, FileContent,
+    GetTaskPushNotificationConfigParams, ImplicitOAuthFlow, IngressChannel, JidokaMode,
+    ListTaskPushNotificationConfigParams, ListTasksParams, ListTasksResult, Message,
+    MessageSendConfiguration, MessageSendParams, OAuthFlows, Part, PasswordOAuthFlow,
+    PushNotificationAuthenticationInfo, PushNotificationConfig, RefusalReason, RefusalReceipt,
+    Role, SecurityScheme, SupplierQuality, SystemHealth, Task, TaskArtifactUpdateEvent,
+    TaskIdParams, TaskPushNotificationConfig, TaskQueryParams, TaskSendParams, TaskState,
+    TaskStatus, TaskStatusUpdateEvent, TransportProtocol, WorkConstraints, WorkPacket,
 };
 
 // Port traits for better separation of concerns
 pub use port::{
-    AsyncMessageHandler, AsyncNotificationManager, AsyncStreamingHandler, AsyncTaskManager,
-    MessageHandler, NotificationManager, StreamingHandler, StreamingSubscriber, TaskManager,
-    UpdateEvent,
+    AdmissionController, AsyncAdmissionController, AsyncMessageHandler, AsyncNotificationManager,
+    AsyncStreamingHandler, AsyncTaskManager, MessageHandler, NotificationManager, StreamingHandler,
+    StreamingSubscriber, TaskManager, UpdateEvent,
 };
 
 #[cfg(feature = "http-client")]
@@ -113,8 +115,8 @@ pub use adapter::WebSocketServer;
 
 #[cfg(feature = "server")]
 pub use adapter::{
-    DefaultRequestProcessor, InMemoryTaskStorage, NoopPushNotificationSender,
-    PushNotificationRegistry, PushNotificationSender, SimpleAgentInfo,
+    AdmissionConfig, DefaultAdmissionController, DefaultRequestProcessor, InMemoryTaskStorage,
+    NoopPushNotificationSender, PushNotificationRegistry, PushNotificationSender, SimpleAgentInfo,
 };
 
 #[cfg(all(feature = "server", feature = "http-client"))]
@@ -126,3 +128,8 @@ pub use adapter::{ApiKeyAuthenticator, BearerTokenAuthenticator, NoopAuthenticat
 pub use adapter::{JwtAuthenticator, OAuth2Authenticator, OpenIdConnectAuthenticator};
 #[cfg(any(feature = "http-server", feature = "ws-server"))]
 pub use port::Authenticator;
+
+#[cfg(feature = "crypto")]
+pub use services::{
+    MerkleTree, Receipt, ReceiptChain, ReceiptError, ReceiptResult, ReplayValidator,
+};

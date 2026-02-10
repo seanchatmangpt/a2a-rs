@@ -216,6 +216,22 @@ The project follows **hexagonal architecture** principles:
 └─────────────────────────────────────────────────────────┘
 ```
 
+## 🧬 The Paradigm Shift: Constructive Code Manufacture
+
+a2a-rs is built on a foundational paradigm shift from **Subjective Code Manufacture (SCM)** to **Constructive Code Manufacture (CCM)**. This approach eliminates coordination overhead and enables autonomous agent-driven development through:
+
+- **Ontology-Driven Generation** - Protocol types defined in RDF ontologies, generated via SPARQL CONSTRUCT queries
+- **Zero Coordination Overhead** - Conway's Law and Little's Law constraints collapsed through deterministic compilation
+- **Toyota Production System Principles** - Just-In-Time generation, Jidoka quality gates, Kanban-based workflows
+- **Receipts Over Narratives** - Every decision emits a proof object with hash chains and replay pointers
+- **Complete Autonomy** - All admissible states resolved internally; inadmissible states refused at the boundary
+
+**Learn more:**
+- **[PARADIGM-SHIFT.md](./docs/PARADIGM-SHIFT.md)** - Complete explanation of SCM→CCM transition
+- **[TPS-MAPPING.md](./docs/TPS-MAPPING.md)** - Manufacturing principles applied to code generation
+- **[CONSTRUCT.md](./CONSTRUCT.md)** - Theoretical foundations (information theory, category theory)
+- **[CLAUDE.md](./CLAUDE.md)** - Development guide with CONSTRUCT workflow
+
 ## 📚 Documentation
 
 - **[Core Library Docs](https://docs.rs/a2a-rs)** - Complete API documentation
