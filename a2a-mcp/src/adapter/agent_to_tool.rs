@@ -2,14 +2,22 @@
 
 use crate::error::{Error, Result};
 use crate::message::MessageConverter;
-use a2a_rs::domain::{AgentCard, AgentSkill, Task, TaskState, TaskStatus};
-use rmcp::model::{Tool, ToolCall, ToolResponse};
+use a2a_rs::{AgentCard, AgentSkill, Message, Part, Role, Task, TaskState, TaskStatus};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
+use uuid::Uuid;
+
+/// Tool definition for RMCP
+#[derive(Debug, Clone)]
+pub struct Tool {
+    pub name: String,
+    pub description: String,
+}
 
 /// Adapts A2A agents to RMCP tool capabilities
 pub struct AgentToToolAdapter {
-    converter: Arc<MessageConverter>,
+    pub converter: Arc<MessageConverter>,
     agent_cache: HashMap<String, AgentCard>,
 }
 
@@ -22,12 +30,12 @@ impl AgentToToolAdapter {
         }
     }
 
-    /// Add an agent to the cache
+    /// Add an agent to cache
     pub fn add_agent(&mut self, url: String, card: AgentCard) {
         self.agent_cache.insert(url, card);
     }
 
-    /// Get an agent from the cache
+    /// Get an agent from cache
     pub fn get_agent(&self, url: &str) -> Option<&AgentCard> {
         self.agent_cache.get(url)
     }
@@ -48,49 +56,70 @@ impl AgentToToolAdapter {
         Tool {
             name: tool_name,
             description: format!("{} - {}", agent.description, skill.description),
-            parameters: None, // Could generate from skill.inputs if available
         }
     }
 
-    /// Convert RMCP tool call to A2A task parameters
+    /// Convert tool call to task parameters
     pub fn tool_call_to_task(
         &self,
-        call: &ToolCall,
-        agent_card: &AgentCard,
-        method: &str,
+        tool_name: &str,
+        params: &Value,
+        _agent_card: &AgentCard,
     ) -> Result<Task> {
-        // Create a message from the tool call
-        let message = self.converter.tool_call_to_message(call)?;
+        let task_id = Uuid::new_v4().to_string();
+        let context_id = Uuid::new_v4().to_string();
+        let message_id = Uuid::new_v4().to_string();
+
+        // Create a message from tool call
+        let text = format!("Call tool: {}", tool_name);
+
+        // Convert Value to Map<String, Value>
+        let data_map = if let Some(obj) = params.as_object() {
+            obj.clone()
+        } else {
+            serde_json::Map::new()
+        };
+
+        let message = Message {
+            role: Role::User,
+            parts: vec![
+                Part::Text {
+                    text,
+                    metadata: None,
+                },
+                Part::Data {
+                    data: data_map,
+                    metadata: None,
+                },
+            ],
+            metadata: None,
+            reference_task_ids: None,
+            message_id,
+            task_id: Some(task_id.clone()),
+            context_id: Some(context_id.clone()),
+            extensions: None,
+            kind: "message".to_string(),
+        };
 
         // Create a task with the message
         Ok(Task {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: task_id,
+            context_id,
             status: TaskStatus {
                 state: TaskState::Submitted,
-                message: Some("Task submitted from RMCP tool call".to_string()),
+                message: None,
+                timestamp: Some(chrono::Utc::now()),
             },
-            messages: vec![message],
-            artifacts: Vec::new(),
-            history_ttl: Some(3600), // 1 hour default
-            metadata: Some(serde_json::json!({
-                "skill": method,
-                "agent": agent_card.name.clone(),
-            })),
+            artifacts: None,
+            history: Some(vec![message]),
+            metadata: None,
+            kind: "task".to_string(),
         })
-    }
-
-    /// Convert A2A task response to RMCP tool response
-    pub fn task_to_tool_response(&self, task: &Task) -> Result<ToolResponse> {
-        // Extract the last agent message
-        let agent_message = self.converter.extract_agent_message(task)?;
-
-        // Convert to tool response
-        self.converter.message_to_tool_response(agent_message)
     }
 
     /// Parse tool method string in format "agent_url:method"
     pub fn parse_tool_method(&self, tool_method: &str) -> Result<(String, String)> {
-        let parts: Vec<&str> = tool_method.splitn(2, ':').collect();
+        let parts: Vec<&str> = tool_method.split(':').collect();
         if parts.len() != 2 {
             return Err(Error::InvalidToolMethod(tool_method.to_string()));
         }

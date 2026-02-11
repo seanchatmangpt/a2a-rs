@@ -1,10 +1,10 @@
 //! Client for accessing A2A agents as RMCP tools
 
-use crate::adapter::AgentToToolAdapter;
+use crate::adapter::{AgentToToolAdapter, Tool};
 use crate::error::{Error, Result};
-use a2a_rs::domain::agent::AgentCard;
-use a2a_rs::port::client::AsyncA2AClient;
-use rmcp::{Tool, ToolCall, ToolResponse};
+use crate::message::{ToolCall, ToolResponse};
+use a2a_rs::domain::AgentCard;
+use a2a_rs::port::AsyncA2AClient;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tracing::{info, debug, error};
@@ -65,29 +65,34 @@ impl<C: AsyncA2AClient> A2aRmcpClient<C> {
         drop(adapter); // Release the lock before async calls
         
         debug!("Calling agent {} with method {}", agent_card.name, method);
-        
+
         // Convert RMCP tool call to A2A task
         let adapter = self.adapter.lock().unwrap();
-        let task = adapter.tool_call_to_task(&call, &agent_card, &method)?;
+        let task = adapter.tool_call_to_task(&method, &call.params, &agent_card)?;
         let task_id = task.id.clone();
         drop(adapter);
-        
+
         // Send task to A2A agent
         let response = self.a2a_client.send_task(&agent_url, task).await
             .map_err(|e| Error::A2a(format!("Failed to send task to agent: {}", e)))?;
-        
+
         debug!("Task {} sent to agent, waiting for completion", task_id);
-        
+
         // Wait for task completion
         let completed_task = self.a2a_client.wait_for_completion(&agent_url, &response.id).await
             .map_err(|e| Error::A2a(format!("Failed to wait for task completion: {}", e)))?;
-        
-        info!("Task {} completed with status {:?}", 
-              completed_task.id, 
+
+        info!("Task {} completed with status {:?}",
+              completed_task.id,
               completed_task.status.state);
-        
-        // Convert A2A task result to RMCP tool response
+
+        // Extract the result from the completed task
         let adapter = self.adapter.lock().unwrap();
-        adapter.task_to_tool_response(&completed_task)
+        let agent_message = adapter.converter.extract_agent_message(&completed_task)?;
+        let result = adapter.converter.extract_data(agent_message)?;
+        drop(adapter);
+
+        Ok(ToolResponse { result })
+    }
     }
 }

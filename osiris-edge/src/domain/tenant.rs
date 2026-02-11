@@ -129,7 +129,7 @@ impl HierarchicalIdentity {
 }
 
 /// Role in RBAC system
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Role {
     pub name: String,

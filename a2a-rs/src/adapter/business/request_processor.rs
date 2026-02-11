@@ -341,6 +341,97 @@ where
             serde_json::to_value(card)?,
         ))
     }
+
+    /// Process a send message request (v0.3.0)
+    async fn process_send_message(
+        &self,
+        request: &crate::application::handlers::message::SendMessageRequest,
+    ) -> Result<JSONRPCResponse, A2AError> {
+        let params = &request.params;
+
+        // Determine task_id and context_id from the message or generate them
+        let task_id = params
+            .message
+            .task_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let context_id = params
+            .message
+            .context_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+        // Get session_id from params metadata if provided (v0.3.0)
+        let session_id = params
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get("sessionId"))
+            .and_then(|v| v.as_str());
+
+        tracing::info!(
+            task_id = %task_id,
+            context_id = %context_id,
+            message_id = %params.message.message_id,
+            "Processing message/send request"
+        );
+
+        // Process the message through the handler
+        let task = self
+            .message_handler
+            .process_message(&task_id, &params.message, session_id)
+            .await?;
+
+        Ok(JSONRPCResponse::success(
+            request.id.clone(),
+            serde_json::to_value(task)?,
+        ))
+    }
+
+    /// Process a send message streaming request (v0.3.0)
+    async fn process_send_message_streaming(
+        &self,
+        request: &crate::application::handlers::message::SendMessageStreamingRequest,
+    ) -> Result<JSONRPCResponse, A2AError> {
+        let params = &request.params;
+
+        // Determine task_id and context_id from the message or generate them
+        let task_id = params
+            .message
+            .task_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let context_id = params
+            .message
+            .context_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+        // Get session_id from params metadata if provided (v0.3.0)
+        let session_id = params
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get("sessionId"))
+            .and_then(|v| v.as_str());
+
+        tracing::info!(
+            task_id = %task_id,
+            context_id = %context_id,
+            message_id = %params.message.message_id,
+            "Processing message/stream request"
+        );
+
+        // Process the message through the handler
+        // The streaming updates will be handled separately via WebSocket
+        let task = self
+            .message_handler
+            .process_message(&task_id, &params.message, session_id)
+            .await?;
+
+        Ok(JSONRPCResponse::success(
+            request.id.clone(),
+            serde_json::to_value(task)?,
+        ))
+    }
 }
 
 #[async_trait]
@@ -384,12 +475,9 @@ where
     ) -> Result<JSONRPCResponse, A2AError> {
         match request {
             A2ARequest::SendTask(req) => self.process_send_task(req).await,
-            A2ARequest::SendMessage(_req) => {
-                // Convert MessageSendParams to TaskSendParams for backwards compatibility
-                // TODO: Implement proper message handling
-                Err(A2AError::UnsupportedOperation(
-                    "Message sending not yet implemented".to_string(),
-                ))
+            A2ARequest::SendMessage(req) => {
+                // Handle message/send request
+                self.process_send_message(req).await
             }
             A2ARequest::GetTask(req) => self.process_get_task(req).await,
             A2ARequest::CancelTask(req) => self.process_cancel_task(req).await,
@@ -401,12 +489,9 @@ where
             }
             A2ARequest::TaskResubscription(req) => self.process_task_resubscription(req).await,
             A2ARequest::SendTaskStreaming(req) => self.process_send_task_streaming(req).await,
-            A2ARequest::SendMessageStreaming(_req) => {
-                // Convert MessageSendParams to TaskSendParams for backwards compatibility
-                // TODO: Implement proper message streaming
-                Err(A2AError::UnsupportedOperation(
-                    "Message streaming not yet implemented".to_string(),
-                ))
+            A2ARequest::SendMessageStreaming(req) => {
+                // Handle message/stream request
+                self.process_send_message_streaming(req).await
             }
             A2ARequest::GetExtendedCard(req) => self.process_get_extended_card(req).await,
             // v0.3.0 new methods

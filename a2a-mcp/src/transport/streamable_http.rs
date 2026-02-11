@@ -36,7 +36,7 @@ use axum::{
     },
     routing::{get, post},
 };
-use futures::stream::{self, Stream, StreamExt};
+use futures::stream::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::{RwLock, mpsc};
@@ -364,15 +364,15 @@ struct SseQuery {
     session.id = tracing::field::Empty,
     last_event_id = tracing::field::Empty
 )))]
-async fn handle_sse_stream<H: McpMessageHandler>(
+async fn handle_sse_stream<H: McpMessageHandler + 'static>(
     State(state): State<ServerState<H>>,
     headers: HeaderMap,
     Query(query): Query<SseQuery>,
 ) -> impl IntoResponse {
     // Validate origin
-    if let Err(e) = validate_origin(&headers, &state.config.allowed_origins) {
+    if let Err(_e) = validate_origin(&headers, &state.config.allowed_origins) {
         #[cfg(feature = "tracing")]
-        error!("Origin validation failed: {}", e);
+        error!("Origin validation failed");
         return (StatusCode::FORBIDDEN, "Origin forbidden").into_response();
     }
 
@@ -425,25 +425,38 @@ async fn handle_sse_stream<H: McpMessageHandler>(
 
             // Spawn handler task
             tokio::spawn(async move {
-                if let Err(e) = handler.handle_streaming_request(request, response_tx).await {
+                if let Err(_e) = handler.handle_streaming_request(request, response_tx).await {
                     #[cfg(feature = "tracing")]
-                    error!("Streaming request failed: {}", e);
+                    error!("Streaming request failed");
                 }
             });
         }
     }
 
     // Create SSE stream
-    let stream = ReceiverStream::new(rx).map(|msg| Event::default().data(msg).event("message"));
+    // In Axum 0.8, Event::data() returns Result, so we need to handle it
+    let stream = ReceiverStream::new(rx).map(|msg| {
+        Ok::<_, std::convert::Infallible>(
+            Event::default()
+                .data(msg)
+                .event("message")
+        )
+    });
 
+    // Create SSE with optional keep-alive
+    // In Axum 0.8, keep_alive API has changed
     let sse = if state.config.sse_keep_alive {
         Sse::new(stream).keep_alive(
-            KeepAlive::new()
+            axum::response::sse::KeepAlive::new()
                 .interval(state.config.sse_keep_alive_interval)
                 .text("keep-alive"),
         )
     } else {
-        Sse::new(stream)
+        Sse::new(stream).keep_alive(
+            axum::response::sse::KeepAlive::new()
+                .interval(std::time::Duration::from_secs(3600))
+                .text("")
+        )
     };
 
     // Clean up session when stream ends

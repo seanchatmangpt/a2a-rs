@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 
-use crate::domain::{AuthErrorCode, RefusalReason, RefusalReceipt, TypeCheckErrorCode, WipError};
+use crate::domain::{AuthErrorCode, RefusalReceipt, TypeCheckErrorCode, WipError};
 
 /// Refusal engine for generating inadmissible-before receipts
 ///

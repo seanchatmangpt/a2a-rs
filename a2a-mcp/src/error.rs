@@ -1,5 +1,9 @@
 //! Error types for a2a-mcp integration
 
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 use thiserror::Error;
 
 /// Errors that can occur in a2a-mcp integration
@@ -69,30 +73,26 @@ pub enum Error {
 /// Result type for a2a-mcp operations
 pub type Result<T> = std::result::Result<T, Error>;
 
+impl IntoResponse for Error {
+    fn into_response(self) -> Response {
+        let (status, message) = match &self {
+            Error::TaskNotFound(_) => (StatusCode::NOT_FOUND, self.to_string()),
+            Error::AgentNotFound(_) => (StatusCode::NOT_FOUND, self.to_string()),
+            Error::SessionNotFound(_) => (StatusCode::NOT_FOUND, self.to_string()),
+            Error::InvalidToolMethod(_) => (StatusCode::BAD_REQUEST, self.to_string()),
+            Error::OriginForbidden(_) => (StatusCode::FORBIDDEN, self.to_string()),
+            Error::TaskProcessing(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
+            Error::Server(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
+            Error::Session(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
+            Error::Json(_) => (StatusCode::BAD_REQUEST, self.to_string()),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
+        };
+
+        (status, message).into_response()
+    }
+}
+
 /// Convenience function to convert a string error to an Error
 pub fn err<E: ToString>(e: E) -> Error {
     Error::Translation(e.to_string())
-}
-
-/// Convert a2a_rs error to our Error type
-impl From<a2a_rs::Error> for Error {
-    fn from(e: a2a_rs::Error) -> Self {
-        Error::A2a(e.to_string())
-    }
-}
-
-// A utility function to convert an RMCP error to A2A error code
-pub(crate) fn rmcp_error_to_a2a_code(rmcp_err: &rmcp::ServerJsonRpcMessage) -> i32 {
-    if let Some(error) = &rmcp_err.error {
-        match error.code {
-            -32700 => -32700, // Parse error
-            -32600 => -32600, // Invalid request
-            -32601 => -32601, // Method not found
-            -32602 => -32602, // Invalid params
-            -32603 => -32603, // Internal error
-            _ => -32000,      // Server error
-        }
-    } else {
-        -32000 // Default server error
-    }
 }

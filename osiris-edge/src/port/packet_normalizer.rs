@@ -116,6 +116,23 @@ mod tests {
 
     struct MockNormalizer;
 
+    impl MockNormalizer {
+        /// Helper: Extract string field from JSON value
+        fn extract_string(data: &Value, field: &str) -> Result<String, NormalizationError> {
+            data.get(field)
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+                .ok_or_else(|| NormalizationError::MissingField(field.to_string()))
+        }
+
+        /// Helper: Extract optional string field from JSON value
+        fn extract_optional_string(data: &Value, field: &str) -> Option<String> {
+            data.get(field)
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+        }
+    }
+
     #[async_trait]
     impl PacketNormalizer for MockNormalizer {
         async fn normalize_gmail(&self, _data: Value) -> Result<TypedPacket, NormalizationError> {
@@ -148,13 +165,132 @@ mod tests {
 
         async fn normalize_calendar(
             &self,
-            _data: Value,
+            data: Value,
         ) -> Result<TypedPacket, NormalizationError> {
-            unimplemented!()
+            // Mock implementation following WorkspaceNormalizer pattern
+            use crate::domain::packet::{Attendee, EventType, PacketContext, PacketPayload, PacketSource};
+
+            let event_id = Self::extract_string(&data, "eventId")
+                .or_else(|_| Self::extract_string(&data, "event_id"))
+                .or_else(|_| Self::extract_string(&data, "id"))
+                .unwrap_or_else(|_| "evt123".to_string());
+
+            let calendar_id = Self::extract_string(&data, "calendarId")
+                .or_else(|_| Self::extract_string(&data, "calendar_id"))
+                .unwrap_or_else(|_| "cal456".to_string());
+
+            let status = Self::extract_optional_string(&data, "status")
+                .unwrap_or_else(|| "confirmed".to_string());
+
+            let source = PacketSource::Calendar {
+                event_id,
+                calendar_id,
+                status,
+            };
+
+            let title = Self::extract_string(&data, "summary")
+                .or_else(|_| Self::extract_string(&data, "title"))
+                .unwrap_or_else(|_| "Test Event".to_string());
+
+            let description = Self::extract_optional_string(&data, "description");
+
+            let start_time = Self::extract_string(&data, "startTime")
+                .or_else(|_| Self::extract_string(&data, "start"))
+                .and_then(|s| s.parse().map_err(|e| NormalizationError::InvalidPayload(format!("Invalid timestamp: {}", e))))
+                .unwrap_or_else(|_| chrono::Utc::now());
+
+            let end_time = Self::extract_string(&data, "endTime")
+                .or_else(|_| Self::extract_string(&data, "end"))
+                .and_then(|s| s.parse().map_err(|e| NormalizationError::InvalidPayload(format!("Invalid timestamp: {}", e))))
+                .unwrap_or_else(|_| chrono::Utc::now());
+
+            let location = Self::extract_optional_string(&data, "location");
+            let meeting_link = Self::extract_optional_string(&data, "hangoutLink")
+                .or_else(|| Self::extract_optional_string(&data, "conferenceData"));
+
+            let attendees = vec![];
+
+            let payload = PacketPayload::CalendarEvent {
+                title,
+                description,
+                start_time,
+                end_time,
+                location,
+                attendees,
+                meeting_link,
+            };
+
+            let context = PacketContext {
+                user_id: "user123".to_string(),
+                workspace_domain: "example.com".to_string(),
+                event_type: EventType::Created,
+                raw_webhook_data: Some(data),
+                metadata: Default::default(),
+            };
+
+            Ok(TypedPacket::new(source, payload, context))
         }
 
-        async fn normalize_drive(&self, _data: Value) -> Result<TypedPacket, NormalizationError> {
-            unimplemented!()
+        async fn normalize_drive(&self, data: Value) -> Result<TypedPacket, NormalizationError> {
+            // Mock implementation following WorkspaceNormalizer pattern
+            use crate::domain::packet::{DriveItemType, EventType, PacketContext, PacketPayload, PacketSource};
+
+            let file_id = Self::extract_string(&data, "fileId")
+                .or_else(|_| Self::extract_string(&data, "file_id"))
+                .or_else(|_| Self::extract_string(&data, "id"))
+                .unwrap_or_else(|_| "file123".to_string());
+
+            let mime_type = Self::extract_string(&data, "mimeType")
+                .or_else(|_| Self::extract_string(&data, "mime_type"))
+                .unwrap_or_else(|_| "application/pdf".to_string());
+
+            let is_folder = mime_type == "application/vnd.google-apps.folder";
+            let item_type = if is_folder {
+                DriveItemType::Folder
+            } else {
+                DriveItemType::File
+            };
+
+            let source = PacketSource::Drive {
+                file_id,
+                item_type: item_type.clone(),
+                mime_type: mime_type.clone(),
+            };
+
+            let name = Self::extract_string(&data, "name")
+                .unwrap_or_else(|_| "Test File".to_string());
+
+            let context = PacketContext {
+                user_id: "user123".to_string(),
+                workspace_domain: "example.com".to_string(),
+                event_type: EventType::Created,
+                raw_webhook_data: Some(data),
+                metadata: Default::default(),
+            };
+
+            // Create appropriate payload based on item type
+            let payload = if is_folder {
+                PacketPayload::DriveFolder {
+                    name,
+                    owner: "owner@example.com".to_string(),
+                    shared_with: vec![],
+                    last_modified: chrono::Utc::now(),
+                    is_trashed: false,
+                    parent_folders: vec![],
+                }
+            } else {
+                PacketPayload::DriveFile {
+                    name,
+                    size: 1024,
+                    owner: "owner@example.com".to_string(),
+                    shared_with: vec![],
+                    last_modified: chrono::Utc::now(),
+                    is_trashed: false,
+                    parent_folders: vec![],
+                }
+            };
+
+            Ok(TypedPacket::new(source, payload, context))
         }
     }
 

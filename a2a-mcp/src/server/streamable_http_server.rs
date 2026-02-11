@@ -20,6 +20,7 @@ use axum::{
     },
     routing::{get, post},
 };
+use futures::stream::StreamExt;
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -31,7 +32,7 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::adapter::{InMemorySessionManager, OriginGuard};
 use crate::application::{JsonRpcRequest, JsonRpcResponse, McpTaskHandler};
 use crate::domain::Session;
-use crate::error::{Error, Result};
+use crate::error::Error;
 use crate::port::{OriginValidator, SessionManager};
 
 /// Server state for MCP Streamable HTTP
@@ -108,7 +109,7 @@ impl StreamableHttpServer {
     #[cfg_attr(feature = "tracing", instrument(skip(self), fields(
         addr = %self.addr
     )))]
-    pub async fn start(&self) -> Result<()> {
+    pub async fn start(&self) -> crate::error::Result<()> {
         #[cfg(feature = "tracing")]
         info!("Starting MCP Streamable HTTP server on {}", self.addr);
 
@@ -232,17 +233,17 @@ async fn session_middleware(
             }
             Some(session)
         }
-        Err(e) => {
+        Err(_e) => {
             #[cfg(feature = "tracing")]
-            error!("Failed to manage session: {}", e);
+            error!("Failed to manage session");
             None
         }
     };
 
     // Update session access time
-    if let Err(e) = state.session_manager.touch_session(&session_id).await {
+    if let Err(_e) = state.session_manager.touch_session(&session_id).await {
         #[cfg(feature = "tracing")]
-        warn!("Failed to touch session: {}", e);
+        warn!("Failed to touch session");
     }
 
     // Extract origin from extensions
@@ -275,10 +276,10 @@ async fn session_middleware(
 }
 
 /// Handle POST requests (request/response mode)
-#[cfg_attr(feature = "tracing", instrument(skip(state, headers, request)))]
+#[cfg_attr(feature = "tracing", instrument(skip(state, _headers, request)))]
 async fn handle_mcp_post(
     State(state): State<McpServerState>,
-    headers: HeaderMap,
+    _headers: HeaderMap,
     axum::extract::Extension(context): axum::extract::Extension<RequestContext>,
     Json(request): Json<JsonRpcRequest>,
 ) -> impl IntoResponse {
@@ -313,38 +314,39 @@ async fn handle_mcp_sse(
     headers: HeaderMap,
     axum::extract::Extension(context): axum::extract::Extension<RequestContext>,
     axum::extract::Query(query): axum::extract::Query<SseQuery>,
-) -> Result<impl IntoResponse> {
+) -> impl IntoResponse {
     #[cfg(feature = "tracing")]
     debug!("SSE stream started: session_id={}", context.session_id);
 
     // Create channel for streaming messages
-    let (tx, rx) = mpsc::channel::<Result<Event>>(100);
+    // In Axum 0.8, we need to use a channel that sends Results
+    let (tx, rx) = mpsc::channel::<std::result::Result<Event, Error>>(100);
 
     // Extract Last-Event-ID for resumption
-    let last_event_id = headers
+    let _last_event_id = headers
         .get("last-event-id")
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(0);
 
     #[cfg(feature = "tracing")]
-    debug!("Last-Event-ID: {}", last_event_id);
+    debug!("Last-Event-ID: {}", _last_event_id);
 
     // Process initial request if provided
     if let Some(req_json) = query.request {
-        let request =
-            serde_json::from_str::<JsonRpcRequest>(&req_json).map_err(|e| Error::Json(e))?;
+        if let Ok(request) = serde_json::from_str::<JsonRpcRequest>(&req_json) {
+            // Process request and send response as first event
+            let response = state.handler.handle_request(request).await;
+            let response_value = serde_json::to_value(&response).unwrap_or(Value::Null);
 
-        // Process request and send response as first event
-        let response = state.handler.handle_request(request).await;
-        let response_value = serde_json::to_value(&response).unwrap_or(Value::Null);
+            // In Axum 0.8, Event builder methods return Result
+            let event = Event::default()
+                .id("0")
+                .event("mcp-response")
+                .data(response_value.to_string());
 
-        let event = Event::default()
-            .id("0")
-            .event("mcp-response")
-            .data(response_value.to_string());
-
-        let _ = tx.send(Ok(event)).await;
+            let _ = tx.send(Ok(event)).await;
+        }
     }
 
     // Clone tx for spawned task
@@ -359,9 +361,9 @@ async fn handle_mcp_sse(
             interval.tick().await;
 
             // Keep session alive
-            if let Err(e) = session_manager.touch_session(&session_id).await {
+            if let Err(_e) = session_manager.touch_session(&session_id).await {
                 #[cfg(feature = "tracing")]
-                warn!("Failed to touch session during SSE: {}", e);
+                warn!("Failed to touch session during SSE");
                 break;
             }
 
@@ -376,16 +378,18 @@ async fn handle_mcp_sse(
     });
 
     // Create the SSE stream
-    let stream = ReceiverStream::new(rx)
-        .map(|e| {
-            e.unwrap_or_else(|e| {
+    // In Axum 0.8, keep_alive is added via Sse::new().keep_alive()
+    let stream = ReceiverStream::new(rx).map(|result| -> Result<Event, Error> {
+        match result {
+            Ok(event) => Ok(event),
+            Err(e) => {
                 let error_msg = json!({
                     "error": e.to_string()
                 });
-                Event::default().event("error").data(error_msg.to_string())
-            })
-        })
-        .keep_alive(KeepAlive::default());
+                Ok(Event::default().event("error").data(error_msg.to_string()))
+            }
+        }
+    });
 
     // Build response with session ID header
     let mut response_headers = HeaderMap::new();
@@ -396,7 +400,14 @@ async fn handle_mcp_sse(
     #[cfg(feature = "tracing")]
     debug!("SSE stream established");
 
-    Ok((response_headers, Sse::new(stream)))
+    // Add keep-alive to the SSE stream
+    let sse = Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(std::time::Duration::from_secs(30))
+            .text("keep-alive"),
+    );
+
+    (response_headers, sse)
 }
 
 #[cfg(test)]

@@ -2,10 +2,11 @@
 
 use crate::error::Result;
 use crate::message::MessageConverter;
-use a2a_rs::domain::{message::Message, task::Task};
+use a2a_rs::{Message, Part, Role};
 use async_trait::async_trait;
-use rmcp::{ToolCall, ToolResponse};
+use serde_json::Value;
 use std::sync::Arc;
+use uuid::Uuid;
 
 /// Transport adapter that bridges A2A to RMCP
 pub struct A2aToRmcpTransport {
@@ -18,49 +19,43 @@ impl A2aToRmcpTransport {
         Self { converter }
     }
 
-    /// Convert A2A message to RMCP tool call
+    /// Convert A2A message to RMCP tool call parameters
     pub async fn convert_message_to_tool_call(
         &self,
         msg: &Message,
         method: &str,
-    ) -> Result<ToolCall> {
+    ) -> Result<(String, Value)> {
         // Extract parameters from message
-        let params = msg
-            .parts
-            .iter()
-            .find_map(|part| {
-                if let a2a_rs::domain::message::MessagePart::Data { data, .. } = part {
-                    Some(data.clone())
-                } else {
-                    None
-                }
-            })
-            .unwrap_or(serde_json::Value::Null);
+        let params = self.converter.extract_data(msg)?;
 
-        Ok(ToolCall {
-            method: method.to_string(),
-            params,
-        })
+        Ok((method.to_string(), params))
     }
 
-    /// Convert RMCP tool response to A2A message
-    pub async fn convert_tool_response_to_message(&self, resp: &ToolResponse) -> Result<Message> {
-        let mut parts = Vec::new();
-
-        // Add data part with response result
-        parts.push(a2a_rs::domain::message::MessagePart::Data {
-            data: resp.result.clone(),
-            mime_type: Some("application/json".to_string()),
-        });
-
-        // If the result is a string, also add it as text
-        if let serde_json::Value::String(text) = &resp.result {
-            parts.push(a2a_rs::domain::message::MessagePart::Text { text: text.clone() });
-        }
+    /// Convert RMCP tool response result to A2A message
+    pub async fn convert_result_to_message(
+        &self,
+        result: &Value,
+    ) -> Result<Message> {
+        // Convert Value to Map<String, Value>
+        let data_map = if let Some(obj) = result.as_object() {
+            obj.clone()
+        } else {
+            serde_json::Map::new()
+        };
 
         Ok(Message {
-            role: "agent".to_string(),
-            parts,
+            role: Role::Agent,
+            parts: vec![Part::Data {
+                data: data_map,
+                metadata: None,
+            }],
+            metadata: None,
+            reference_task_ids: None,
+            message_id: Uuid::new_v4().to_string(),
+            task_id: None,
+            context_id: None,
+            extensions: None,
+            kind: "message".to_string(),
         })
     }
 }
@@ -69,5 +64,5 @@ impl A2aToRmcpTransport {
 #[async_trait]
 pub trait A2aToRmcpHandler {
     /// Process an A2A task as RMCP tool calls
-    async fn process_a2a_task(&self, task: &Task) -> Result<ToolResponse>;
+    async fn process_task(&self, task: &a2a_rs::Task) -> Result<Value>;
 }

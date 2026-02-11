@@ -3,9 +3,10 @@
 // This module is already conditionally compiled with #[cfg(feature = "server")] in mod.rs
 
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 use crate::{
-    domain::{A2AError, AgentCapabilities, AgentCard, AgentProvider, AgentSkill},
+    domain::{A2AError, AgentCapabilities, AgentCard, AgentProvider, AgentSkill, SecurityScheme},
     services::server::AgentInfoProvider,
 };
 
@@ -92,9 +93,87 @@ impl SimpleAgentInfo {
     }
 
     /// Set the authentication schemes
-    pub fn with_authentication(self, _schemes: Vec<String>) -> Self {
-        // TODO: Implement SecurityScheme integration
-        // For now, just return self since we removed AgentAuthentication
+    ///
+    /// Takes a vector of tuples where each tuple contains a scheme name and the SecurityScheme.
+    /// The schemes are stored in the AgentCard's security_schemes field as a HashMap.
+    ///
+    /// # Example
+    /// ```rust
+    /// use a2a_rs::{SecurityScheme, SimpleAgentInfo};
+    /// use std::collections::HashMap;
+    ///
+    /// let schemes = vec![
+    ///     ("bearer".to_string(), SecurityScheme::Http {
+    ///         scheme: "bearer".to_string(),
+    ///         bearer_format: Some("JWT".to_string()),
+    ///         description: Some("Bearer token authentication".to_string()),
+    ///     }),
+    /// ];
+    ///
+    /// let agent = SimpleAgentInfo::new("MyAgent".to_string(), "https://example.com".to_string())
+    ///     .with_authentication(schemes);
+    /// ```
+    pub fn with_authentication(mut self, schemes: Vec<(String, SecurityScheme)>) -> Self {
+        if !schemes.is_empty() {
+            self.card.security_schemes = Some(schemes.into_iter().collect());
+        }
+        self
+    }
+
+    /// Add a single security scheme to the agent card
+    ///
+    /// This method allows adding authentication schemes one at a time using the builder pattern.
+    /// If a security scheme with the same name already exists, it will be replaced.
+    ///
+    /// # Example
+    /// ```rust
+    /// use a2a_rs::{SecurityScheme, SimpleAgentInfo};
+    ///
+    /// let agent = SimpleAgentInfo::new("MyAgent".to_string(), "https://example.com".to_string())
+    ///     .add_security_scheme(
+    ///         "bearer".to_string(),
+    ///         SecurityScheme::Http {
+    ///             scheme: "bearer".to_string(),
+    ///             bearer_format: Some("JWT".to_string()),
+    ///             description: Some("Bearer token authentication".to_string()),
+    ///         }
+    ///     )
+    ///     .add_security_scheme(
+    ///         "mtls".to_string(),
+    ///         SecurityScheme::MutualTls {
+    ///             description: Some("Client certificate authentication".to_string()),
+    ///         }
+    ///     );
+    /// ```
+    pub fn add_security_scheme(mut self, name: String, scheme: SecurityScheme) -> Self {
+        if self.card.security_schemes.is_none() {
+            self.card.security_schemes = Some(HashMap::new());
+        }
+        self.card.security_schemes.as_mut().unwrap().insert(name, scheme);
+        self
+    }
+
+    /// Set the default security requirements for the agent
+    ///
+    /// This sets the top-level `security` field which specifies which authentication
+    /// schemes and scopes are required by default. Each requirement is a HashMap mapping
+    /// scheme names to required scopes.
+    ///
+    /// # Example
+    /// ```rust
+    /// use a2a_rs::{SimpleAgentInfo};
+    /// use std::collections::HashMap;
+    ///
+    /// let mut security_req = HashMap::new();
+    /// security_req.insert("bearer".to_string(), vec!["read:tasks".to_string(), "write:tasks".to_string()]);
+    ///
+    /// let agent = SimpleAgentInfo::new("MyAgent".to_string(), "https://example.com".to_string())
+    ///     .with_security_requirements(vec![security_req]);
+    /// ```
+    pub fn with_security_requirements(mut self, requirements: Vec<HashMap<String, Vec<String>>>) -> Self {
+        if !requirements.is_empty() {
+            self.card.security = Some(requirements);
+        }
         self
     }
 

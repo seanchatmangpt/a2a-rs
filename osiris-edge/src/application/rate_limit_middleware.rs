@@ -107,10 +107,10 @@ impl RateLimitErrorResponse {
 
 impl IntoResponse for RateLimitErrorResponse {
     fn into_response(self) -> Response {
-        let retry_after = self.retry_after_secs;
+        let retry_after = self.retry_after_secs.to_string();
         (
             StatusCode::TOO_MANY_REQUESTS,
-            [("Retry-After", retry_after.to_string().into())],
+            [("Retry-After", retry_after)],
             axum::Json(self),
         )
             .into_response()
@@ -177,53 +177,63 @@ fn extract_tenant_id<B>(req: &Request<B>) -> Option<String> {
 ///     .layer(middleware);
 /// # }
 /// ```
-pub fn rate_limit_layer<S>(
+pub fn rate_limit_layer(
     limiter: Arc<dyn RateLimiter>,
     config: RateLimitMiddlewareConfig,
-) -> axum::middleware::FromFn<
-    impl Fn(
-        Request<axum::body::Body>,
-        Next,
-    ) -> futures::future::BoxFuture<'static, Result<Response, RateLimitErrorResponse>>
-    + Clone,
-> {
-    axum::middleware::from_fn(move |mut req: Request<axum::body::Body>, next: Next| {
-        let limiter = Arc::clone(&limiter);
-        let config = config.clone();
+) -> impl Clone {
+    use std::future::Future;
 
-        Box::pin(async move {
-            let ip = extract_ip(&req);
+    type HandlerFuture = std::pin::Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Response,
+                        RateLimitErrorResponse,
+                    >,
+                > + Send,
+        >,
+    >;
 
-            // Check global limit if enabled
-            if config.check_global {
-                if let Err(e) = limiter.check_global_limit(1).await {
-                    warn!("Global rate limit exceeded for request from {}", ip);
-                    return Err(RateLimitErrorResponse::from_error(&e));
-                }
-            }
+    axum::middleware::from_fn_with_state::<_, (), HandlerFuture>(
+        (),
+        move |_state: (), req: Request<axum::body::Body>, next: Next| {
+            let limiter = Arc::clone(&limiter);
+            let config = config.clone();
 
-            // Check IP limit if enabled
-            if config.check_ip {
-                if let Err(e) = limiter.check_ip_limit(&ip, 1).await {
-                    warn!("IP rate limit exceeded for {}", ip);
-                    return Err(RateLimitErrorResponse::from_error(&e));
-                }
-            }
+            async move {
+                let ip = extract_ip(&req);
 
-            // Check tenant limit if enabled and tenant ID is present
-            if config.check_tenant {
-                if let Some(tenant_id) = extract_tenant_id(&req) {
-                    if let Err(e) = limiter.check_tenant_limit(&tenant_id, 1).await {
-                        warn!("Tenant rate limit exceeded for {}", tenant_id);
+                // Check global limit if enabled
+                if config.check_global {
+                    if let Err(e) = limiter.check_global_limit(1).await {
+                        warn!("Global rate limit exceeded for request from {}", ip);
                         return Err(RateLimitErrorResponse::from_error(&e));
                     }
                 }
-            }
 
-            // All checks passed, continue to next handler
-            Ok(next.run(req).await)
-        })
-    })
+                // Check IP limit if enabled
+                if config.check_ip {
+                    if let Err(e) = limiter.check_ip_limit(&ip, 1).await {
+                        warn!("IP rate limit exceeded for {}", ip);
+                        return Err(RateLimitErrorResponse::from_error(&e));
+                    }
+                }
+
+                // Check tenant limit if enabled and tenant ID is present
+                if config.check_tenant {
+                    if let Some(tenant_id) = extract_tenant_id(&req) {
+                        if let Err(e) = limiter.check_tenant_limit(&tenant_id, 1).await {
+                            warn!("Tenant rate limit exceeded for {}", tenant_id);
+                            return Err(RateLimitErrorResponse::from_error(&e));
+                        }
+                    }
+                }
+
+                // All checks passed, continue to next handler
+                Ok(next.run(req).await)
+            }
+        },
+    )
 }
 
 #[cfg(test)]

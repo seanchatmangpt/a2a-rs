@@ -7,6 +7,7 @@ use crate::domain::{
 };
 use crate::port::{Decision, EvaluationContext, PolicyEngine, TenantManager};
 use async_trait::async_trait;
+use chrono::Timelike;
 use chrono::Utc;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -34,7 +35,7 @@ impl<T: TenantManager> DynamicPolicyEngine<T> {
             .get_tenant(&identity.tenant_id)
             .await?
             .ok_or_else(|| {
-                EdgeError::ConfigError(format!("Tenant {} not found", identity.tenant_id.as_str()))
+                EdgeError::Configuration(format!("Tenant {} not found", identity.tenant_id.as_str()))
             })?;
 
         let role_bindings = self.tenant_manager.get_role_bindings(identity).await?;
@@ -103,7 +104,7 @@ impl<T: TenantManager> DynamicPolicyEngine<T> {
             .get_tenant(&identity.tenant_id)
             .await?
             .ok_or_else(|| {
-                EdgeError::ConfigError(format!("Tenant {} not found", identity.tenant_id.as_str()))
+                EdgeError::Configuration(format!("Tenant {} not found", identity.tenant_id.as_str()))
             })?;
 
         let mut policies = tenant_config.policies.clone();
@@ -281,7 +282,7 @@ impl<T: TenantManager> PolicyEngine for DynamicPolicyEngine<T> {
             .get_tenant(tenant_id)
             .await?
             .ok_or_else(|| {
-                EdgeError::ConfigError(format!("Tenant {} not found", tenant_id.as_str()))
+                EdgeError::Configuration(format!("Tenant {} not found", tenant_id.as_str()))
             })?;
 
         config.policies.push(policy);
@@ -294,7 +295,7 @@ impl<T: TenantManager> PolicyEngine for DynamicPolicyEngine<T> {
             .get_tenant(tenant_id)
             .await?
             .ok_or_else(|| {
-                EdgeError::ConfigError(format!("Tenant {} not found", tenant_id.as_str()))
+                EdgeError::Configuration(format!("Tenant {} not found", tenant_id.as_str()))
             })?;
 
         config.policies.retain(|p| p.policy_id != policy_id);
@@ -307,7 +308,7 @@ impl<T: TenantManager> PolicyEngine for DynamicPolicyEngine<T> {
             .get_tenant(tenant_id)
             .await?
             .ok_or_else(|| {
-                EdgeError::ConfigError(format!("Tenant {} not found", tenant_id.as_str()))
+                EdgeError::Configuration(format!("Tenant {} not found", tenant_id.as_str()))
             })?;
 
         Ok(config.policies)

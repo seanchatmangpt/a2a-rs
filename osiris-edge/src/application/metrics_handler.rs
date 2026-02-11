@@ -8,13 +8,12 @@ use axum::{
     Json, Router,
     extract::State,
     http::StatusCode,
-    middleware::{self, Next},
+    middleware::Next,
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
-use tower_http::classify::ServerErrorsAsFailures;
 use tracing::debug;
 
 use crate::port::MetricsCollector;
@@ -94,9 +93,7 @@ pub async fn metrics_handler<M: MetricsCollector>(
 /// ```
 pub async fn request_metrics_middleware<M: MetricsCollector + 'static>(
     State(metrics): State<Arc<M>>,
-    path: axum::extract::Path<String>,
-    method: axum::extract::ConnectInfo,
-    mut req: axum::extract::Request,
+    req: axum::extract::Request,
     next: Next,
 ) -> axum::response::Response {
     let start = Instant::now();

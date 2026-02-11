@@ -23,7 +23,7 @@ futures = "0.3"
 async-trait = "0.1"
 
 # HTTP server
-axum = { version = "0.7", features = ["macros"] }
+axum = { version = "0.8", features = ["macros"] }
 tower-http = { version = "0.5", features = ["cors"] }
 
 # Utilities

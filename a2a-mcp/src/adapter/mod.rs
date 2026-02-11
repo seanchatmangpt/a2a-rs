@@ -13,3 +13,6 @@ pub use session_manager::InMemorySessionManager;
 pub use sse_manager::{AxumSseStream, SseEvent, SseManager, SseManagerConfig};
 pub use task_wrapper::TaskWrapper;
 pub use tool_to_agent::ToolToAgentAdapter;
+
+// Re-export Tool from message module for convenience
+pub use crate::message::Tool;

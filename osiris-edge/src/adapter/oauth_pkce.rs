@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::domain::{
-    AuthorizationRequest, AuthorizationResponse, ChallengeMethod, CodeChallenge, CodeVerifier,
+    AuthorizationRequest, AuthorizationResponse, CodeChallenge, CodeVerifier,
     EdgeError, Oauth2Session, RefreshTokenRequest, TokenRequest, TokenResponse,
 };
 use crate::port::Oauth2Authenticator;

@@ -353,13 +353,14 @@ impl SqlxTaskStorage {
     pub(crate) async fn broadcast_status_update(
         &self,
         task_id: &str,
+        context_id: &str,
         status: TaskStatus,
         final_: bool,
     ) -> Result<(), A2AError> {
         // Create the update event
         let event = TaskStatusUpdateEvent {
             task_id: task_id.to_string(),
-            context_id: "default".to_string(), // TODO: get actual context_id
+            context_id: context_id.to_string(),
             kind: "status-update".to_string(),
             status,
             final_,
@@ -396,6 +397,7 @@ impl SqlxTaskStorage {
     pub(crate) async fn broadcast_artifact_update(
         &self,
         task_id: &str,
+        context_id: &str,
         artifact: Artifact,
         _index: Option<u32>,
         _final: bool,
@@ -403,7 +405,7 @@ impl SqlxTaskStorage {
         // Create the update event
         let event = TaskArtifactUpdateEvent {
             task_id: task_id.to_string(),
-            context_id: "default".to_string(), // TODO: get actual context_id
+            context_id: context_id.to_string(),
             kind: "artifact-update".to_string(),
             artifact,
             append: None,
@@ -537,7 +539,7 @@ impl AsyncTaskManager for SqlxTaskStorage {
         let task = self.get_task(task_id, None).await?;
 
         // Broadcast status update
-        self.broadcast_status_update(task_id, task.status.clone(), false)
+        self.broadcast_status_update(task_id, &task.context_id, task.status.clone(), false)
             .await?;
 
         Ok(task)
@@ -630,7 +632,7 @@ impl AsyncTaskManager for SqlxTaskStorage {
         let updated_task = self.get_task(task_id, None).await?;
 
         // Broadcast status update (with final flag set to true)
-        self.broadcast_status_update(task_id, updated_task.status.clone(), true)
+        self.broadcast_status_update(task_id, &updated_task.context_id, updated_task.status.clone(), true)
             .await?;
 
         Ok(updated_task)
@@ -1050,7 +1052,7 @@ impl AsyncStreamingHandler for SqlxTaskStorage {
         // But don't fail if the task doesn't exist yet - the subscriber will get updates when it's created
         if let Ok(task) = self.get_task(task_id, None).await {
             let _ = self
-                .broadcast_status_update(task_id, task.status, false)
+                .broadcast_status_update(task_id, &task.context_id, task.status, false)
                 .await;
         }
 
@@ -1079,7 +1081,7 @@ impl AsyncStreamingHandler for SqlxTaskStorage {
             if let Some(artifacts) = task.artifacts {
                 for artifact in artifacts {
                     let _ = self
-                        .broadcast_artifact_update(task_id, artifact, None, false)
+                        .broadcast_artifact_update(task_id, &task.context_id, artifact, None, false)
                         .await;
                 }
             }
@@ -1119,7 +1121,7 @@ impl AsyncStreamingHandler for SqlxTaskStorage {
         task_id: &'a str,
         update: TaskStatusUpdateEvent,
     ) -> Result<(), A2AError> {
-        self.broadcast_status_update(task_id, update.status, update.final_)
+        self.broadcast_status_update(task_id, &update.context_id, update.status, update.final_)
             .await
     }
 
@@ -1130,6 +1132,7 @@ impl AsyncStreamingHandler for SqlxTaskStorage {
     ) -> Result<(), A2AError> {
         self.broadcast_artifact_update(
             task_id,
+            &update.context_id,
             update.artifact,
             None,
             update.last_chunk.unwrap_or(false),

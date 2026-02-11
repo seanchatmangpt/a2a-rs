@@ -20,7 +20,7 @@ bon = "2.3"
 dotenvy = "0.15.7"
 
 # Async foundation
-tokio = { version = "1.32", features = ["rt", "rt-multi-thread", "macros", "net", "io-util", "sync", "time", "fs", "process"] }
+tokio = { version = "1.32", features = ["rt", "rt-multi-thread", "macros", "net", "io-util", "sync", "time", "fs", "process", "signal"] }
 async-trait = "0.1"
 
 # Logging

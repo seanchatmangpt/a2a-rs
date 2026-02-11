@@ -394,7 +394,7 @@ impl AuditLog for CloudLoggingAuditLogger {
         }
 
         // Check that local buffer is accessible
-        let _ = self
+        let _lock_guard = self
             .local_buffer
             .lock()
             .map_err(|e| AuditError::ServiceError(format!("Local buffer lock failed: {}", e)))?;

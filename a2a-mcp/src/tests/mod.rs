@@ -3,9 +3,10 @@
 #[cfg(test)]
 mod message_converter_tests {
     use crate::message::MessageConverter;
-    use a2a_rs::domain::message::{Message, MessagePart};
+    use a2a_rs::domain::{Message, Part, Role};
     use rmcp::{ClientJsonRpcMessage, ServerJsonRpcMessage};
-    use serde_json::json;
+    use serde::json;
+    use serde_json::{json, Map, Value};
 
     #[test]
     fn test_rmcp_to_a2a_request() {
@@ -20,12 +21,12 @@ mod message_converter_tests {
 
         let a2a_message = converter.rmcp_to_a2a_request(&rmcp_request).unwrap();
 
-        assert_eq!(a2a_message.role, "user");
+        assert_eq!(a2a_message.role, Role::User);
         assert_eq!(a2a_message.parts.len(), 2);
 
         // Check text part
         match &a2a_message.parts[0] {
-            MessagePart::Text { text } => {
+            Part::Text { text, .. } => {
                 assert!(text.contains("test_method"));
             }
             _ => panic!("Expected text part"),
@@ -33,8 +34,8 @@ mod message_converter_tests {
 
         // Check data part
         match &a2a_message.parts[1] {
-            MessagePart::Data { data, .. } => {
-                assert_eq!(data["key"], "value");
+            Part::Data { data, .. } => {
+                assert_eq!(data.get("key"), Some(&Value::String("value".to_string())));
             }
             _ => panic!("Expected data part"),
         }
@@ -44,17 +45,28 @@ mod message_converter_tests {
     fn test_a2a_to_rmcp_response() {
         let converter = MessageConverter::new();
 
+        let mut data_map = Map::new();
+        data_map.insert("result".to_string(), Value::String("success".to_string()));
+
         let a2a_message = Message {
-            role: "agent".to_string(),
+            role: Role::Agent,
             parts: vec![
-                MessagePart::Text {
+                Part::Text {
                     text: "Test response".to_string(),
+                    metadata: None,
                 },
-                MessagePart::Data {
-                    data: json!({"result": "success"}),
-                    mime_type: Some("application/json".to_string()),
+                Part::Data {
+                    data: data_map.clone(),
+                    metadata: None,
                 },
             ],
+            metadata: None,
+            reference_task_ids: None,
+            message_id: "msg-123".to_string(),
+            task_id: None,
+            context_id: None,
+            extensions: None,
+            kind: "message".to_string(),
         };
 
         let id = Some(json!(123));
@@ -73,8 +85,9 @@ mod message_converter_tests {
 
 #[cfg(test)]
 mod adapter_tests {
-    use crate::adapter::{AgentToToolAdapter, ToolToAgentAdapter};
-    use rmcp::{Tool, ToolCall};
+    use crate::adapter::tool_to_agent::{ToolToAgentAdapter, Tool};
+    use a2a_rs::domain::{Role, TaskState};
+    use rmcp::ToolCall;
     use serde_json::json;
 
     #[test]
@@ -82,7 +95,6 @@ mod adapter_tests {
         let tools = vec![Tool {
             name: "test_tool".to_string(),
             description: "A test tool".to_string(),
-            parameters: None,
         }];
 
         let adapter = ToolToAgentAdapter::new(
@@ -100,11 +112,10 @@ mod adapter_tests {
     }
 
     #[test]
-    fn test_tool_call_to_task() {
+    fn test_extract_tool_call() {
         let tools = vec![Tool {
             name: "test_tool".to_string(),
             description: "A test tool".to_string(),
-            parameters: None,
         }];
 
         let adapter = ToolToAgentAdapter::new(
@@ -113,18 +124,25 @@ mod adapter_tests {
             "An agent for testing".to_string(),
         );
 
-        let tool_call = ToolCall {
-            method: "test_tool".to_string(),
-            params: json!({"input": "test_input"}),
-        };
+        // Test with tool call message
+        let message = a2a_rs::domain::Message::builder()
+            .role(Role::User)
+            .message_id("msg-123".to_string())
+            .parts(vec![
+                a2a_rs::domain::Part::Text {
+                    text: "Call tool: test_tool".to_string(),
+                    metadata: None,
+                },
+                a2a_rs::domain::Part::Data {
+                    data: serde_json::json!({"input": "test_input"}).as_object().unwrap().clone(),
+                    metadata: None,
+                },
+            ])
+            .build();
 
-        let task = adapter.tool_call_to_task(&tool_call).unwrap();
+        let (tool_name, params) = adapter.extract_tool_call(&message).unwrap();
 
-        assert_eq!(
-            task.status.state,
-            a2a_rs::domain::task::TaskState::Submitted
-        );
-        assert_eq!(task.messages.len(), 1);
-        assert_eq!(task.messages[0].role, "user");
+        assert_eq!(tool_name, "test_tool");
+        assert_eq!(params["input"], "test_input");
     }
 }

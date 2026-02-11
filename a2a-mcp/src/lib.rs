@@ -63,7 +63,7 @@ pub use adapter::{
 };
 
 // Re-export message converter
-pub use message::MessageConverter;
+pub use message::{MessageConverter, Tool, ToolCall, ToolResponse};
 
 // Re-export application components
 pub use application::{JsonRpcRequest, JsonRpcResponse, McpTaskHandler};

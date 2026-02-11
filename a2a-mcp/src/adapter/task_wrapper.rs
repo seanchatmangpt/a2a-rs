@@ -7,15 +7,16 @@ use async_trait::async_trait;
 use chrono::Utc;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
-use a2a_rs::domain::core::task::TaskState as A2aTaskState;
-use a2a_rs::port::task_manager::AsyncTaskManager;
+use a2a_rs::domain::TaskState as A2aTaskState;
+use a2a_rs::port::AsyncTaskManager;
 
-use crate::domain::{McpTask, McpTaskState};
+use crate::domain::{McpTask, McpTaskResult, McpTaskState};
 use crate::error::{Error, Result};
 use crate::port::mcp_task_manager::{McpTaskManager, mcp_task_error};
 

@@ -4,7 +4,7 @@
 //! dependencies like jsonwebtoken and reqwest.
 
 use async_trait::async_trait;
-use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;

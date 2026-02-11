@@ -9,12 +9,20 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// macOS actuator implementation
-#[derive(Debug)]
 pub struct MacOSActuator {
     /// Active actuations being tracked
     active_actuations: Arc<RwLock<HashMap<String, ActuationStatus>>>,
     /// Confirmation provider for user approval
     confirmation_provider: Option<Arc<dyn ConfirmationProvider>>,
+}
+
+impl std::fmt::Debug for MacOSActuator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MacOSActuator")
+            .field("active_actuations", &self.active_actuations)
+            .field("confirmation_provider", &self.confirmation_provider.as_ref().map(|_| "..."))
+            .finish()
+    }
 }
 
 impl MacOSActuator {

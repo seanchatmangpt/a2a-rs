@@ -1182,12 +1182,14 @@ mod tests {
 
             // Verify none of the "reachable_*" states are in unreachable list
             for i in 0..num_reachable {
-                prop_assert!(!analysis.unreachable_states.contains(&format!("reachable_{}", i)));
+                let state_id = format!("reachable_{}", i);
+                prop_assert!(!analysis.unreachable_states.contains(&state_id));
             }
 
             // Verify all "unreachable_*" states are in unreachable list
             for i in 0..num_unreachable {
-                prop_assert!(analysis.unreachable_states.contains(&format!("unreachable_{}", i)));
+                let state_id = format!("unreachable_{}", i);
+                prop_assert!(analysis.unreachable_states.contains(&state_id));
             }
         }
     }

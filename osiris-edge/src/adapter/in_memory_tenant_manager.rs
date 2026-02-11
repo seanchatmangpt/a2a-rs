@@ -81,7 +81,7 @@ impl TenantManager for InMemoryTenantManager {
         let mut tenants = self.tenants.write().await;
 
         if tenants.contains_key(&config.tenant_id) {
-            return Err(EdgeError::ConfigError(format!(
+            return Err(EdgeError::Configuration(format!(
                 "Tenant {} already exists",
                 config.tenant_id.as_str()
             )));
@@ -95,7 +95,7 @@ impl TenantManager for InMemoryTenantManager {
         let mut tenants = self.tenants.write().await;
 
         if !tenants.contains_key(&config.tenant_id) {
-            return Err(EdgeError::ConfigError(format!(
+            return Err(EdgeError::Configuration(format!(
                 "Tenant {} not found",
                 config.tenant_id.as_str()
             )));
@@ -109,7 +109,7 @@ impl TenantManager for InMemoryTenantManager {
         let mut tenants = self.tenants.write().await;
 
         if tenants.remove(tenant_id).is_none() {
-            return Err(EdgeError::ConfigError(format!(
+            return Err(EdgeError::Configuration(format!(
                 "Tenant {} not found",
                 tenant_id.as_str()
             )));
@@ -133,7 +133,7 @@ impl TenantManager for InMemoryTenantManager {
             }
             Ok(())
         } else {
-            Err(EdgeError::ConfigError(
+            Err(EdgeError::Configuration(
                 "No reload function configured".to_string(),
             ))
         }
@@ -149,7 +149,7 @@ impl TenantManager for InMemoryTenantManager {
         let mut bindings = self.role_bindings.write().await;
 
         if bindings.remove(binding_id).is_none() {
-            return Err(EdgeError::ConfigError(format!(
+            return Err(EdgeError::Configuration(format!(
                 "Role binding {} not found",
                 binding_id
             )));

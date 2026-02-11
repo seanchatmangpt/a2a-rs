@@ -60,7 +60,6 @@ pub use adapter::{
     PkceConfig,
     PrometheusCollector,
     RealtimeAnalyticsEngine,
-    RedisConfig,
     SpanEvent,
     SpanHandle,
     SpanMetrics,

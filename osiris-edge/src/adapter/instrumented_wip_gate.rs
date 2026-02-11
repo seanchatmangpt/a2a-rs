@@ -4,8 +4,10 @@
 //! the RealtimeAnalyticsEngine for live monitoring.
 
 use async_trait::async_trait;
+use std::collections::HashSet;
 use std::future::Future;
 use std::sync::Arc;
+use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
 
 use crate::adapter::{KanbanWipGate, RealtimeAnalyticsEngine};
@@ -17,6 +19,7 @@ pub struct InstrumentedPermit {
     work_id: Uuid,
     inner_permit: <KanbanWipGate as WipGate>::Permit,
     analytics: Arc<RealtimeAnalyticsEngine>,
+    in_progress_ids: Arc<AsyncMutex<HashSet<String>>>,
 }
 
 impl WipPermit for InstrumentedPermit {
@@ -24,8 +27,11 @@ impl WipPermit for InstrumentedPermit {
         // Record completion before releasing
         let analytics = Arc::clone(&self.analytics);
         let work_id = self.work_id;
+        let in_progress_ids = Arc::clone(&self.in_progress_ids);
         tokio::spawn(async move {
             analytics.record_completion(work_id).await;
+            // Remove from in-progress tracking
+            in_progress_ids.lock().await.remove(&work_id.to_string());
         });
 
         // Inner permit auto-releases when InstrumentedPermit is dropped
@@ -37,8 +43,11 @@ impl Drop for InstrumentedPermit {
         // Auto-release will also record completion
         let analytics = Arc::clone(&self.analytics);
         let work_id = self.work_id;
+        let in_progress_ids = Arc::clone(&self.in_progress_ids);
         tokio::spawn(async move {
             analytics.record_completion(work_id).await;
+            // Remove from in-progress tracking
+            in_progress_ids.lock().await.remove(&work_id.to_string());
         });
     }
 }
@@ -78,6 +87,7 @@ impl Drop for InstrumentedPermit {
 pub struct InstrumentedWipGate {
     inner: KanbanWipGate,
     analytics: Arc<RealtimeAnalyticsEngine>,
+    in_progress_ids: Arc<AsyncMutex<HashSet<String>>>,
 }
 
 impl InstrumentedWipGate {
@@ -90,6 +100,7 @@ impl InstrumentedWipGate {
         let instrumented = Self {
             inner: gate,
             analytics: Arc::new(analytics),
+            in_progress_ids: Arc::new(AsyncMutex::new(HashSet::new())),
         };
 
         // Start periodic WIP state updates
@@ -119,10 +130,15 @@ impl InstrumentedWipGate {
                 // Record start (permit acquired)
                 self.analytics.record_start(work_id).await;
 
+                // Track in-progress ID
+                let id_string = work_id.to_string();
+                self.in_progress_ids.lock().await.insert(id_string.clone());
+
                 Ok(InstrumentedPermit {
                     work_id,
                     inner_permit: permit,
                     analytics: Arc::clone(&self.analytics),
+                    in_progress_ids: Arc::clone(&self.in_progress_ids),
                 })
             }
             Err(e) => {
@@ -159,6 +175,7 @@ impl InstrumentedWipGate {
     fn start_wip_state_updater(&self) {
         let inner = self.inner.clone();
         let analytics = Arc::clone(&self.analytics);
+        let in_progress_ids = Arc::clone(&self.in_progress_ids);
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
@@ -169,12 +186,16 @@ impl InstrumentedWipGate {
                 let current_wip = WipGate::current(&inner);
                 let wip_limit = WipGate::limit(&inner);
 
-                // For now, we don't track individual IDs in the gate
-                // In production, you'd maintain a separate registry of in-progress work IDs
-                let in_progress = vec![]; // TODO: Track actual in-progress IDs
+                // Get actual in-progress work IDs
+                let in_progress = in_progress_ids.lock().await;
+                let in_progress_uuids: Vec<Uuid> = in_progress
+                    .iter()
+                    .filter_map(|s| Uuid::parse_str(s).ok())
+                    .collect();
+                drop(in_progress);
 
                 analytics
-                    .update_wip_state(current_wip, wip_limit, in_progress)
+                    .update_wip_state(current_wip, wip_limit, in_progress_uuids)
                     .await;
             }
         });
@@ -183,6 +204,35 @@ impl InstrumentedWipGate {
     /// Get reference to the analytics engine
     pub fn analytics(&self) -> &RealtimeAnalyticsEngine {
         &self.analytics
+    }
+
+    /// Manually mark work as started (adds to in-progress tracking)
+    ///
+    /// This is useful when you need to track work that doesn't go through
+    /// the standard permit acquisition flow.
+    ///
+    /// # Arguments
+    /// * `id` - Unique work identifier
+    pub async fn start_work(&self, id: String) {
+        self.in_progress_ids.lock().await.insert(id);
+    }
+
+    /// Manually mark work as completed (removes from in-progress tracking)
+    ///
+    /// This is useful when you need to track work completion that doesn't go
+    /// through the standard permit release flow.
+    ///
+    /// # Arguments
+    /// * `id` - Unique work identifier
+    pub async fn complete_work(&self, id: &str) {
+        self.in_progress_ids.lock().await.remove(id);
+    }
+
+    /// Get current count of in-progress work items
+    ///
+    /// Returns the number of work items currently being tracked as in-progress.
+    pub async fn in_progress_count(&self) -> usize {
+        self.in_progress_ids.lock().await.len()
     }
 }
 
@@ -204,14 +254,20 @@ impl WipGate for InstrumentedWipGate {
         match WipGate::try_acquire(&self.inner) {
             Ok(permit) => {
                 let analytics = Arc::clone(&self.analytics);
+                let in_progress_ids = Arc::clone(&self.in_progress_ids);
+                let id_string = work_id.to_string();
+
+                // Track in-progress ID (sync context)
                 tokio::spawn(async move {
                     analytics.record_start(work_id).await;
+                    in_progress_ids.lock().await.insert(id_string);
                 });
 
                 Ok(InstrumentedPermit {
                     work_id,
                     inner_permit: permit,
                     analytics: Arc::clone(&self.analytics),
+                    in_progress_ids: Arc::clone(&self.in_progress_ids),
                 })
             }
             Err(e) => {

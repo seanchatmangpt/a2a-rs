@@ -2,13 +2,17 @@
 
 use crate::error::{Error, Result};
 use crate::message::MessageConverter;
-use a2a_rs::domain::{
-    AgentCapabilities, AgentCard, AgentSkill, Message, Part, SecurityScheme, Task, TaskState,
-    TaskStatus,
-};
-use rmcp::model::{Tool, ToolCall, ToolResponse};
+use a2a_rs::{AgentCard, AgentSkill, Message, Part};
+use serde_json::Value;
+use std::collections::HashMap;
 use std::sync::Arc;
-use uuid::Uuid;
+
+/// Tool definition from RMCP
+#[derive(Debug, Clone)]
+pub struct Tool {
+    pub name: String,
+    pub description: String,
+}
 
 /// Adapts RMCP tools to A2A agent capabilities
 pub struct ToolToAgentAdapter {
@@ -19,8 +23,12 @@ pub struct ToolToAgentAdapter {
 }
 
 impl ToolToAgentAdapter {
-    /// Create a new adapter with the given tools
-    pub fn new(tools: Vec<Tool>, agent_name: String, agent_description: String) -> Self {
+    /// Create a new adapter with given tools
+    pub fn new(
+        tools: Vec<Tool>,
+        agent_name: String,
+        agent_description: String,
+    ) -> Self {
         Self {
             tools,
             agent_name,
@@ -36,69 +44,53 @@ impl ToolToAgentAdapter {
             .tools
             .iter()
             .map(|tool| AgentSkill {
+                id: tool.name.clone(),
                 name: tool.name.clone(),
                 description: tool.description.clone(),
-                input_schema: None,
-                output_schema: None,
+                tags: vec!["mcp".to_string(), "tool".to_string()],
+                examples: None,
+                input_modes: Some(vec!["text".to_string()]),
+                output_modes: Some(vec!["text".to_string()]),
+                security: None,
             })
             .collect();
+
+        // Create security schemes
+        let mut security_schemes = HashMap::new();
+        security_schemes.insert(
+            "bearer".to_string(),
+            a2a_rs::SecurityScheme::Http {
+                scheme: "bearer".to_string(),
+                bearer_format: Some("JWT".to_string()),
+                description: Some("Bearer token authentication".to_string()),
+            },
+        );
 
         AgentCard {
             name: self.agent_name.clone(),
             description: self.agent_description.clone(),
             url: "https://example.com/agent".to_string(), // Would be configured
+            provider: None,
             version: "1.0.0".to_string(),
-            capabilities: AgentCapabilities {
+            protocol_version: "0.3.0".to_string(),
+            preferred_transport: "JSONRPC".to_string(),
+            additional_interfaces: None,
+            icon_url: None,
+            documentation_url: None,
+            capabilities: a2a_rs::AgentCapabilities {
                 streaming: true,
-                notifications: false,
-                state_management: true,
+                push_notifications: false,
+                state_transition_history: true,
+                extensions: None,
             },
-            security_schemes: vec![SecurityScheme::Bearer {
-                bearer_format: Some("JWT".to_string()),
-            }],
+            security_schemes: Some(security_schemes),
+            security: None,
+            default_input_modes: vec!["text".to_string()],
+            default_output_modes: vec!["text".to_string()],
             skills,
-            extensions: None,
+            signatures: None,
+            supports_authenticated_extended_card: None,
         }
-    }
-
-    /// Map RMCP tool call to A2A task
-    pub fn tool_call_to_task(&self, call: &ToolCall) -> Result<Task> {
-        // Create an A2A task from an RMCP tool call
-        let task_id = Uuid::new_v4().to_string();
-
-        let initial_message = Message {
-            role: a2a_rs::domain::Role::User,
-            parts: vec![
-                Part::Text {
-                    text: format!("Call tool: {}", call.method),
-                },
-                Part::Data {
-                    data: call.params.clone(),
-                    mime_type: Some("application/json".to_string()),
-                },
-            ],
-        };
-
-        Ok(Task {
-            id: task_id,
-            status: TaskStatus {
-                state: TaskState::Submitted,
-                message: Some("Task submitted".to_string()),
-            },
-            messages: vec![initial_message],
-            artifacts: Vec::new(),
-            history_ttl: Some(3600), // 1 hour default
-            metadata: None,
-        })
-    }
-
-    /// Map A2A task result to RMCP tool response
-    pub fn task_to_tool_response(&self, task: &Task) -> Result<ToolResponse> {
-        // Extract the last agent message from the task
-        let last_message = self.converter.extract_agent_message(task)?;
-
-        // Convert to tool response
-        self.converter.message_to_tool_response(last_message)
     }
 
     /// Find a tool by name
@@ -107,32 +99,37 @@ impl ToolToAgentAdapter {
     }
 
     /// Extract tool name and parameters from an A2A message
-    pub fn extract_tool_call(&self, message: &Message) -> Result<(String, serde_json::Value)> {
-        // Try to find a text part with "Call tool: " prefix
+    pub fn extract_tool_call(&self, message: &Message) -> Result<(String, Value)> {
+        // Try to find a text part with tool call instruction
         let tool_name = message
             .parts
             .iter()
             .find_map(|part| match part {
-                Part::Text { text } => {
+                Part::Text { text, .. } => {
+                    // Parse tool call from text
                     if text.starts_with("Call tool: ") {
                         Some(text.trim_start_matches("Call tool: ").to_string())
                     } else {
-                        None
+                        // Use entire text as tool name
+                        Some(text.clone())
                     }
                 }
                 _ => None,
             })
             .ok_or_else(|| Error::Translation("Unable to extract tool name from message".into()))?;
 
-        // Try to find a data part
-        let params = message
+        // Try to find a data part with parameters
+        let params_map = message
             .parts
             .iter()
             .find_map(|part| match part {
                 Part::Data { data, .. } => Some(data.clone()),
                 _ => None,
             })
-            .unwrap_or(serde_json::Value::Null);
+            .unwrap_or_else(serde_json::Map::new);
+
+        // Convert Map to Value::Object
+        let params = Value::Object(params_map);
 
         Ok((tool_name, params))
     }

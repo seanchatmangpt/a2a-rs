@@ -109,7 +109,7 @@ impl WipGate for KanbanWipGate {
         match Arc::clone(&self.semaphore).try_acquire_owned() {
             Ok(permit) => Ok(SemaphorePermit { permit }),
             Err(_) => Err(WipError::WipLimitReached {
-                current: self.current(),
+                current: WipGate::current(self),
                 limit: self.limit,
             }),
         }

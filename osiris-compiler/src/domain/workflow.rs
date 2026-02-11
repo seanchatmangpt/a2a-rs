@@ -482,6 +482,8 @@ pub enum ExecutionEventType {
     InstanceTerminated,
     /// Variable updated
     VariableUpdated,
+    /// External delegation (e.g., Cloud Workflows)
+    ExternalDelegation,
 }
 
 /// Multi-instance pattern for repeated execution.

@@ -3,7 +3,7 @@
 //! HTTP API endpoints for multi-tenant management operations.
 
 use crate::domain::{
-    EdgeError, HierarchicalIdentity, Policy, Role, RoleBinding, Scope, TenantConfig, TenantId,
+    EdgeError, HierarchicalIdentity, Policy, Role, RoleBinding, TenantConfig, TenantId,
 };
 use crate::port::{EvaluationContext, PolicyEngine, TenantManager};
 use axum::{
@@ -95,9 +95,9 @@ pub struct ErrorResponse {
 impl IntoResponse for EdgeError {
     fn into_response(self) -> Response {
         let (status, error_type) = match &self {
-            EdgeError::ConfigError(_) => (StatusCode::BAD_REQUEST, "config_error"),
-            EdgeError::Authentication { .. } => (StatusCode::UNAUTHORIZED, "authentication_error"),
-            EdgeError::Authorization { .. } => (StatusCode::FORBIDDEN, "authorization_error"),
+            EdgeError::Configuration(_) => (StatusCode::BAD_REQUEST, "config_error"),
+            EdgeError::Authentication(_) => (StatusCode::UNAUTHORIZED, "authentication_error"),
+            EdgeError::Authorization(_) => (StatusCode::FORBIDDEN, "authorization_error"),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
         };
 
@@ -130,7 +130,7 @@ pub async fn get_tenant<T: TenantManager, P: PolicyEngine>(
         .get_tenant(&tenant_id)
         .await?
         .ok_or_else(|| {
-            EdgeError::ConfigError(format!("Tenant {} not found", tenant_id.as_str()))
+            EdgeError::Configuration(format!("Tenant {} not found", tenant_id.as_str()))
         })?;
 
     Ok(Json(config))
@@ -145,7 +145,7 @@ pub async fn update_tenant<T: TenantManager, P: PolicyEngine>(
     let tenant_id = TenantId::new(tenant_id);
 
     if request.config.tenant_id != tenant_id {
-        return Err(EdgeError::ConfigError(
+        return Err(EdgeError::Configuration(
             "Tenant ID in path does not match request body".to_string(),
         ));
     }

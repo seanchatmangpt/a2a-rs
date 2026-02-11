@@ -49,6 +49,7 @@
 
 /// Domain types - pure, platform-agnostic
 pub mod domain;
+pub use domain::error;
 
 /// Port traits - interfaces for actuation
 pub mod port;

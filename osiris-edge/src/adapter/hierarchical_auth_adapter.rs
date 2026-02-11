@@ -3,8 +3,8 @@
 //! Implements hierarchical authentication with tenant isolation and identity resolution.
 
 use crate::domain::{
-    AuthErrorCode, AuthPrincipal, AuthRequest, EdgeError, HierarchicalIdentity, OrganizationId,
-    RefusalReason, TeamId, TenantId, UserId,
+    AuthPrincipal, AuthRequest, EdgeError, HierarchicalIdentity, OrganizationId,
+    TeamId, TenantId, UserId,
 };
 use crate::port::{AuthGate, HierarchicalAuthGate, TenantManager};
 use async_trait::async_trait;
@@ -41,37 +41,27 @@ impl<A: AuthGate, T: TenantManager> HierarchicalAuthGate for HierarchicalAuthAda
         // Verify tenant is enabled
         let enabled = self.tenant_manager.is_tenant_enabled(tenant_id).await?;
         if !enabled {
-            return Err(EdgeError::Authentication {
-                reason: RefusalReason::auth_failed(
-                    AuthErrorCode::InsufficientPermissions,
-                    format!("Tenant {} is disabled", tenant_id.as_str()),
-                ),
-            });
+            return Err(EdgeError::Authentication(format!(
+                "Tenant {} is disabled",
+                tenant_id.as_str()
+            )));
         }
 
         // Extract hierarchical identity from principal claims
         let identity =
             self.extract_identity(&principal)
                 .await?
-                .ok_or_else(|| EdgeError::Authentication {
-                    reason: RefusalReason::auth_failed(
-                        AuthErrorCode::MissingClaim,
-                        "Missing tenant/organization/team claims in token",
-                    ),
-                })?;
+                .ok_or_else(|| EdgeError::Authentication(
+                    "Missing tenant/organization/team claims in token".to_string()
+                ))?;
 
         // Verify the identity belongs to the requested tenant
         if !identity.is_in_tenant(tenant_id) {
-            return Err(EdgeError::Authentication {
-                reason: RefusalReason::auth_failed(
-                    AuthErrorCode::InsufficientPermissions,
-                    format!(
-                        "User belongs to tenant {}, not {}",
-                        identity.tenant_id.as_str(),
-                        tenant_id.as_str()
-                    ),
-                ),
-            });
+            return Err(EdgeError::Authentication(format!(
+                "User belongs to tenant {}, not {}",
+                identity.tenant_id.as_str(),
+                tenant_id.as_str()
+            )));
         }
 
         Ok((principal, identity))

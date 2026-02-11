@@ -52,6 +52,7 @@ default = ["reimbursement-agent", "sqlx"]
 reimbursement-agent = []
 sqlx = ["a2a-rs/sqlx-storage"]
 auth = ["a2a-rs/auth"]
+ocr = []  # OCR integration for receipt processing (tesseract, Google Vision, etc.)
 # Future agent types can be added as features
 # document-agent = ["dep:reqwest"]
 # research-agent = ["dep:reqwest"]

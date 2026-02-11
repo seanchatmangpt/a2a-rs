@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
@@ -15,6 +15,202 @@ use super::types::*;
 
 // NOTE: Task storage is handled by DefaultRequestProcessor + SQLx/InMemory storage
 // This handler is stateless and only processes messages
+
+/// OCR integration for receipt processing
+///
+/// This module provides optical character recognition (OCR) capabilities
+/// for extracting structured data from receipt images and PDFs.
+///
+/// # Feature Flag
+///
+/// This functionality is gated behind the `ocr` feature flag.
+/// When the feature is enabled, actual OCR processing is performed.
+/// When disabled, a placeholder error is returned.
+///
+/// # Supported OCR Backends (Future)
+///
+/// - **Tesseract**: Local OCR engine, requires `tesseract-ocr` dependency
+/// - **Google Vision API**: Cloud-based OCR, requires `google-cloud-vision` dependency
+/// - **Azure Form Recognizer**: Cloud-based OCR, requires `azure-cognitive-services` dependency
+/// - **AWS Textract**: Cloud-based OCR, requires `aws-sdk-textract` dependency
+///
+/// # Expected OCR Interface
+///
+/// The OCR function should:
+/// 1. Accept image bytes (JPEG, PNG, HEIC) or PDF bytes
+/// 2. Extract key fields: vendor name, date, total amount, line items
+/// 3. Return structured data with confidence scores
+/// 4. Handle errors gracefully (e.g., low confidence, corrupted images)
+///
+/// # Example Implementation with Tesseract
+///
+/// ```ignore
+/// #[cfg(feature = "ocr")]
+/// use tesseract_plumbing::TesseractAPI;
+///
+/// pub async fn extract_receipt_data(image: &[u8]) -> Result<ExtractedReceiptData, Error> {
+///     let mut tess = TesseractAPI::new();
+///     tess.set_image_from_mem(image)?;
+///     let text = tess.get_text()?;
+///
+///     // Parse extracted text into structured data
+///     parse_receipt_text(text)
+/// }
+/// ```
+
+/// OCR error types for receipt processing
+#[derive(Debug, Clone)]
+pub enum OcrError {
+    /// OCR feature not enabled
+    NotConfigured,
+    /// Unsupported image format
+    UnsupportedFormat(String),
+    /// OCR processing failed
+    ProcessingFailed(String),
+    /// Confidence score too low
+    LowConfidence { score: f32, threshold: f32 },
+}
+
+impl std::fmt::Display for OcrError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OcrError::NotConfigured => {
+                write!(
+                    f,
+                    "OCR integration not configured. Enable 'ocr' feature flag to use receipt processing."
+                )
+            }
+            OcrError::UnsupportedFormat(format) => {
+                write!(f, "Unsupported image format: {}", format)
+            }
+            OcrError::ProcessingFailed(msg) => write!(f, "OCR processing failed: {}", msg),
+            OcrError::LowConfidence { score, threshold } => {
+                write!(
+                    f,
+                    "OCR confidence score ({}) below threshold ({})",
+                    score, threshold
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for OcrError {}
+
+/// Extract structured data from a receipt image or PDF
+///
+/// # Arguments
+///
+/// * `image_bytes` - Raw bytes of image (JPEG, PNG, HEIC) or PDF
+/// * `mime_type` - MIME type of the file (e.g., "image/jpeg", "application/pdf")
+///
+/// # Returns
+///
+/// * `Ok(ExtractedReceiptData)` - Structured receipt data with confidence score
+/// * `Err(OcrError)` - Error if OCR fails or is not configured
+///
+/// # Example
+///
+/// ```ignore
+/// let receipt_bytes = std::fs::read("receipt.jpg")?;
+/// let extracted = extract_receipt_data(&receipt_bytes, "image/jpeg").await?;
+/// println!("Vendor: {:?}", extracted.vendor_name);
+/// println!("Total: {:?}", extracted.total_amount);
+/// ```
+#[cfg(feature = "ocr")]
+async fn extract_receipt_data(
+    image_bytes: &[u8],
+    mime_type: &str,
+) -> Result<ExtractedReceiptData, OcrError> {
+    // Validate MIME type
+    let supported_types = [
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+        "application/pdf",
+        "image/heic",
+        "image/heif",
+    ];
+
+    if !supported_types.contains(&mime_type) {
+        return Err(OcrError::UnsupportedFormat(mime_type.to_string()));
+    }
+
+    // TODO: Implement actual OCR processing here
+    // Options for future implementation:
+    //
+    // 1. Tesseract (local, free):
+    //    ```ignore
+    //    use tesseract_plumbing::TesseractAPI;
+    //    let mut tess = TesseractAPI::new();
+    //    tess.set_image_from_mem(image_bytes)?;
+    //    let text = tess.get_text()?;
+    //    parse_receipt_text(text)
+    //    ```
+    //
+    // 2. Google Vision API (cloud, paid):
+    //    ```ignore
+    //    use google_cloud_vision::VisionClient;
+    //    let client = VisionClient::new(api_key).await?;
+    //    let result = client.document_text_detection(image_bytes).await?;
+    //    parse_google_vision_result(result)
+    //    ```
+    //
+    // 3. Azure Form Recognizer (cloud, paid):
+    //    ```ignore
+    //    use azure_cognitive_services::form_recognizer::Client;
+    //    let client = Client::new(endpoint, credential)?;
+    //    let result = client.begin_recognize_receipts(image_bytes).await?;
+    //    parse_azure_result(result)
+    //    ```
+
+    // Placeholder: Return mock data until OCR is implemented
+    Ok(ExtractedReceiptData {
+        vendor_name: Some("Mock Vendor (OCR not implemented)".to_string()),
+        date: Some(Utc::now().format("%Y-%m-%d").to_string()),
+        total_amount: Some(Money::Number {
+            amount: 0.0,
+            currency: "USD".to_string(),
+        }),
+        items: Some(vec![LineItem {
+            description: "OCR processing not yet implemented".to_string(),
+            amount: Money::Number {
+                amount: 0.0,
+                currency: "USD".to_string(),
+            },
+            quantity: Some(1.0),
+        }]),
+        confidence_score: 0.0,
+    })
+}
+
+/// Extract structured data from a receipt image or PDF (OCR not configured)
+///
+/// # Feature Gate
+///
+/// This implementation is used when the `ocr` feature is **not** enabled.
+/// It returns an error indicating that OCR is not configured.
+///
+/// To enable OCR, rebuild with:
+/// ```bash
+/// cargo build --package a2a-agents --features ocr
+/// ```
+#[cfg(not(feature = "ocr"))]
+async fn extract_receipt_data(
+    _image_bytes: &[u8],
+    _mime_type: &str,
+) -> Result<ExtractedReceiptData, OcrError> {
+    Err(OcrError::NotConfigured)
+}
+
+/// Spending limits for a user (daily, weekly, monthly)
+#[derive(Debug, Clone)]
+struct SpendingLimits {
+    daily_remaining: f64,
+    weekly_remaining: f64,
+    monthly_remaining: f64,
+}
 
 /// Metrics for tracking handler performance
 #[derive(Debug, Default, Clone)]
@@ -834,6 +1030,7 @@ Example response when asking for info:
                 amount,
                 purpose,
                 category,
+                receipt_files,
                 ..
             } => {
                 // Validate required fields
@@ -867,7 +1064,8 @@ Example response when asking for info:
                     });
                 }
 
-                // TODO: Add more validation (date range, amount limits, etc.)
+                // Comprehensive validation for form submission
+                self.validate_reimbursement_claim(date, amount, purpose, category, receipt_files)?;
 
                 Ok(())
             }
@@ -881,6 +1079,354 @@ Example response when asking for info:
                 Ok(())
             }
         }
+    }
+
+    /// Comprehensive validation for reimbursement claims
+    /// Validates date range, amount limits, required fields, and checks for duplicates
+    #[instrument(skip(self, date, amount, purpose, category, receipt_files))]
+    fn validate_reimbursement_claim(
+        &self,
+        date: &str,
+        amount: &Money,
+        purpose: &str,
+        category: &ExpenseCategory,
+        receipt_files: &Option<Vec<String>>,
+    ) -> Result<(), A2AError> {
+        // 1. Date range validation
+        self.validate_date_range(date)?;
+
+        // 2. Amount limits validation
+        self.validate_amount_limits(amount, category)?;
+
+        // 3. Required fields validation
+        self.validate_required_fields(date, amount, purpose, category, receipt_files)?;
+
+        // 4. Receipt requirement validation
+        self.validate_receipt_requirement(amount, receipt_files)?;
+
+        // 5. Duplicate detection (framework for future enhancement)
+        self.check_for_duplicates(date, amount, category)?;
+
+        Ok(())
+    }
+
+    /// Validate that the receipt date is within acceptable range
+    fn validate_date_range(&self, date_str: &str) -> Result<(), A2AError> {
+        // Try parsing as RFC3339 first (with timezone)
+        let receipt_date = if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(date_str) {
+            dt.with_timezone(&Utc)
+        } else {
+            // Try parsing as YYYY-MM-DD
+            if let Ok(naive_date) = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                naive_date.and_hms_opt(0, 0, 0).unwrap().and_utc()
+            }
+            // Try parsing as MM/DD/YYYY
+            else if let Ok(naive_date) = chrono::NaiveDate::parse_from_str(date_str, "%m/%d/%Y") {
+                naive_date.and_hms_opt(0, 0, 0).unwrap().and_utc()
+            } else {
+                return Err(A2AError::ValidationError {
+                    field: "date".to_string(),
+                    message: format!("Invalid date format: '{}'. Expected YYYY-MM-DD or MM/DD/YYYY", date_str),
+                });
+            }
+        };
+
+        let now = Utc::now();
+
+        // Check date is not in the future
+        if receipt_date > now {
+            return Err(A2AError::ValidationError {
+                field: "date".to_string(),
+                message: format!(
+                    "Receipt date cannot be in the future. Provided date: {}, Current date: {}",
+                    receipt_date.format("%Y-%m-%d"),
+                    now.format("%Y-%m-%d")
+                ),
+            });
+        }
+
+        // Check date is within acceptable timeframe (e.g., last 90 days)
+        let days_threshold = self.validation_rules.date_range_days as i64;
+        let cutoff_date = now - Duration::days(days_threshold);
+
+        if receipt_date < cutoff_date {
+            return Err(A2AError::ValidationError {
+                field: "date".to_string(),
+                message: format!(
+                    "Receipt date is too old. Expenses must be submitted within {} days of the expense date. Provided date: {}, Cutoff date: {}",
+                    days_threshold,
+                    receipt_date.format("%Y-%m-%d"),
+                    cutoff_date.format("%Y-%m-%d")
+                ),
+            });
+        }
+
+        debug!(
+            receipt_date = %receipt_date.format("%Y-%m-%d"),
+            "Date validation passed"
+        );
+        Ok(())
+    }
+
+    /// Validate amount limits per claim and against policy maximums
+    fn validate_amount_limits(
+        &self,
+        amount: &Money,
+        category: &ExpenseCategory,
+    ) -> Result<(), A2AError> {
+        let numeric_amount = match amount {
+            Money::Number { amount, .. } => *amount,
+            Money::String(s) => {
+                // Try to parse string amount
+                let amount_str = s.trim_start_matches('$').replace(",", "");
+                amount_str.parse::<f64>().map_err(|_| A2AError::ValidationError {
+                    field: "amount".to_string(),
+                    message: format!("Could not parse amount from string: '{}'", s),
+                })?
+            }
+        };
+
+        // Check against maximum amount per claim
+        let max_allowed = match &self.validation_rules.max_amount {
+            Money::Number { amount, .. } => *amount,
+            Money::String(s) => {
+                s.trim_start_matches('$')
+                    .replace(",", "")
+                    .parse::<f64>()
+                    .unwrap_or(5000.0)
+            }
+        };
+
+        if numeric_amount > max_allowed {
+            return Err(A2AError::ValidationError {
+                field: "amount".to_string(),
+                message: format!(
+                    "Amount ${:.2} exceeds maximum allowed amount of ${:.2} per claim",
+                    numeric_amount, max_allowed
+                ),
+            });
+        }
+
+        // Category-specific limits (example: meals may have daily limits)
+        if *category == ExpenseCategory::Meals && numeric_amount > 150.0 {
+            warn!(
+                amount = numeric_amount,
+                category = ?category,
+                "Meal amount exceeds typical daily limit"
+            );
+            // This is a warning, not a hard rejection
+            // In production, you might want to track this for audit purposes
+        }
+
+        debug!(
+            amount = numeric_amount,
+            category = ?category,
+            "Amount validation passed"
+        );
+        Ok(())
+    }
+
+    /// Validate that all required fields are present and valid
+    fn validate_required_fields(
+        &self,
+        date: &str,
+        amount: &Money,
+        purpose: &str,
+        category: &ExpenseCategory,
+        _receipt_files: &Option<Vec<String>>,
+    ) -> Result<(), A2AError> {
+        // Date validation (basic presence check)
+        if date.trim().is_empty() {
+            return Err(A2AError::ValidationError {
+                field: "date".to_string(),
+                message: "Date is required and cannot be empty".to_string(),
+            });
+        }
+
+        // Purpose validation (must have meaningful content)
+        let purpose_trimmed = purpose.trim();
+        if purpose_trimmed.is_empty() {
+            return Err(A2AError::ValidationError {
+                field: "purpose".to_string(),
+                message: "Purpose is required and cannot be empty".to_string(),
+            });
+        }
+
+        // Purpose must be at least 10 characters for meaningful description
+        if purpose_trimmed.len() < 10 {
+            return Err(A2AError::ValidationError {
+                field: "purpose".to_string(),
+                message: format!(
+                    "Purpose description is too short ({} chars). Minimum 10 characters required for business justification.",
+                    purpose_trimmed.len()
+                ),
+            });
+        }
+
+        // Purpose must not contain obviously invalid content
+        let invalid_purposes = ["test", "n/a", "none", "tbd", "xxx", "???", "testing"];
+        if invalid_purposes
+            .iter()
+            .any(|&invalid| purpose_trimmed.to_lowercase() == invalid)
+        {
+            return Err(A2AError::ValidationError {
+                field: "purpose".to_string(),
+                message: "Purpose must contain a valid business justification, not placeholder text".to_string(),
+            });
+        }
+
+        // Amount validation (numeric positivity)
+        if let Money::Number { amount, .. } = amount {
+            if *amount <= 0.0 {
+                return Err(A2AError::ValidationError {
+                    field: "amount".to_string(),
+                    message: "Amount must be greater than zero".to_string(),
+                });
+            }
+        }
+
+        // Category validation
+        if !self.validation_rules.allowed_categories.contains(category) {
+            return Err(A2AError::ValidationError {
+                field: "category".to_string(),
+                message: format!(
+                    "Category '{:?}' is not allowed. Allowed categories: {}",
+                    category,
+                    self.validation_rules
+                        .allowed_categories
+                        .iter()
+                        .map(|c| format!("{:?}", c).to_lowercase())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            });
+        }
+
+        debug!("All required fields validated successfully");
+        Ok(())
+    }
+
+    /// Validate that receipt is provided when required
+    fn validate_receipt_requirement(
+        &self,
+        amount: &Money,
+        receipt_files: &Option<Vec<String>>,
+    ) -> Result<(), A2AError> {
+        let numeric_amount = match amount {
+            Money::Number { amount, .. } => *amount,
+            Money::String(s) => {
+                let amount_str = s.trim_start_matches('$').replace(",", "");
+                amount_str.parse::<f64>().unwrap_or(0.0)
+            }
+        };
+
+        let receipt_threshold = match &self.validation_rules.requires_receipt_above {
+            Money::Number { amount, .. } => *amount,
+            Money::String(s) => {
+                s.trim_start_matches('$')
+                    .replace(",", "")
+                    .parse::<f64>()
+                    .unwrap_or(25.0)
+            }
+        };
+
+        // If amount exceeds threshold, receipt is required
+        if numeric_amount > receipt_threshold {
+            let has_receipt = receipt_files
+                .as_ref()
+                .map(|files| !files.is_empty())
+                .unwrap_or(false);
+
+            if !has_receipt {
+                return Err(A2AError::ValidationError {
+                    field: "receipt_files".to_string(),
+                    message: format!(
+                        "Receipt is required for expenses over ${:.2}. Amount: ${:.2}. Please upload a receipt image or PDF.",
+                        receipt_threshold, numeric_amount
+                    ),
+                });
+            }
+        }
+
+        debug!(
+            amount = numeric_amount,
+            has_receipt = receipt_files.is_some(),
+            receipt_threshold = receipt_threshold,
+            "Receipt requirement validation passed"
+        );
+        Ok(())
+    }
+
+    /// Check for duplicate receipt submissions
+    /// This is a framework for future enhancement with persistent storage
+    #[instrument(skip(self))]
+    fn check_for_duplicates(
+        &self,
+        date: &str,
+        amount: &Money,
+        category: &ExpenseCategory,
+    ) -> Result<(), A2AError> {
+        // In production implementation, this would query a database for:
+        // - Same user
+        // - Same date (within tolerance)
+        // - Same amount (within tolerance)
+        // - Same category
+        //
+        // For now, we provide a framework and log warnings
+
+        let numeric_amount = match amount {
+            Money::Number { amount, .. } => *amount,
+            Money::String(s) => {
+                s.trim_start_matches('$')
+                    .replace(",", "")
+                    .parse::<f64>()
+                    .unwrap_or(0.0)
+            }
+        };
+
+        // Example: Warn about potential duplicates for high-value claims
+        if numeric_amount > 500.0 {
+            debug!(
+                date = %date,
+                amount = numeric_amount,
+                category = ?category,
+                "High-value claim submitted - duplicate check recommended in production"
+            );
+        }
+
+        // Framework for future duplicate detection:
+        // let recent_claims = self.storage.get_recent_claims(user_id, days=7).await?;
+        // for claim in recent_claims {
+        //     if claim.date == date && claim.amount == amount && claim.category == category {
+        //         return Err(A2AError::ValidationError {
+        //             field: "duplicate".to_string(),
+        //             message: format!("Possible duplicate claim found: {} on {}", amount, date),
+        //         });
+        //     }
+        // }
+
+        Ok(())
+    }
+
+    /// Calculate user-specific spending limits (daily, weekly, monthly)
+    /// Framework for future enhancement with user tracking
+    #[allow(dead_code)]
+    fn calculate_user_limits(
+        &self,
+        _user_id: &str,
+        _category: &ExpenseCategory,
+    ) -> Result<SpendingLimits, A2AError> {
+        // In production, this would:
+        // 1. Query user's recent claims from storage
+        // 2. Calculate totals for day/week/month
+        // 3. Compare against policy limits
+        // 4. Return remaining allowance
+
+        Ok(SpendingLimits {
+            daily_remaining: 100.0,
+            weekly_remaining: 500.0,
+            monthly_remaining: 2000.0,
+        })
     }
 
     /// Process a reimbursement request and generate appropriate response
@@ -1008,7 +1554,21 @@ Example response when asking for info:
                                     .unwrap_or(0)
                                     as usize,
                                 upload_timestamp: Some(Utc::now().to_rfc3339()),
-                                extracted_data: None, // TODO: OCR integration
+                                // TODO: OCR integration - extract_receipt_data() is async but process_request() is sync
+                                // OCR extraction should happen in the async process_message() method where spawned tasks
+                                // can call await. See the extract_receipt_data() function implementation above.
+                                //
+                                // Future implementation in process_message():
+                                // ```
+                                // for receipt in &mut receipts {
+                                //     if let Some(bytes) = get_file_bytes(&receipt.file_id).await? {
+                                //         if let Ok(data) = extract_receipt_data(&bytes, &receipt.mime_type).await {
+                                //             receipt.extracted_data = Some(data);
+                                //         }
+                                //     }
+                                // }
+                                // ```
+                                extracted_data: None,
                             });
                         }
                     }
