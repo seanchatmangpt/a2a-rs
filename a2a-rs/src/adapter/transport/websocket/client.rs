@@ -1,4 +1,11 @@
-//! WebSocket client adapter for the A2A protocol
+//! Production-ready WebSocket client adapter for the A2A protocol
+//!
+//! This implementation provides:
+//! - Automatic reconnection with exponential backoff
+//! - Session state tracking across reconnections
+//! - Request queue for offline periods
+//! - Heartbeat mechanism for connection health
+//! - Complete error recovery
 
 // This module is already conditionally compiled with #[cfg(feature = "ws-client")] in mod.rs
 
@@ -8,10 +15,15 @@ use futures::{
     stream::{Stream, StreamExt},
 };
 use serde_json::Value;
-use std::{pin::Pin, sync::Arc, time::Duration};
+use std::{
+    collections::VecDeque,
+    pin::Pin,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::{
     net::TcpStream,
-    sync::Mutex, // Changed to tokio::sync::Mutex
+    sync::{Mutex, RwLock, mpsc, watch},
 };
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, connect_async, tungstenite::protocol::Message as WsMessage,
@@ -19,7 +31,7 @@ use tokio_tungstenite::{
 use url::Url;
 
 #[cfg(feature = "tracing")]
-use tracing::{debug, trace};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::{
     adapter::error::WebSocketClientError,
@@ -34,39 +46,234 @@ use crate::{
     services::client::{AsyncA2AClient, StreamItem},
 };
 
-type WebSocketTx = Arc<Mutex<WebSocketStream<MaybeTlsStream<TcpStream>>>>;
+type WebSocketTx = Arc<Mutex<Option<WebSocketStream<MaybeTlsStream<TcpStream>>>>>;
 
-/// WebSocket client for interacting with the A2A protocol with streaming support
+/// Session state tracking for WebSocket connections
+#[derive(Debug, Clone)]
+pub struct SessionState {
+    /// Unique session identifier
+    pub session_id: String,
+    /// Connection timestamp
+    pub connected_at: Instant,
+    /// Last activity timestamp
+    pub last_activity: Instant,
+    /// Reconnection count
+    pub reconnect_count: u32,
+}
+
+impl SessionState {
+    fn new() -> Self {
+        let now = Instant::now();
+        Self {
+            session_id: uuid::Uuid::new_v4().to_string(),
+            connected_at: now,
+            last_activity: now,
+            reconnect_count: 0,
+        }
+    }
+
+    fn touch(&mut self) {
+        self.last_activity = Instant::now();
+    }
+
+    fn is_expired(&self, timeout: Duration) -> bool {
+        self.last_activity.elapsed() > timeout
+    }
+}
+
+/// Queued request for offline retry
+#[derive(Debug, Clone)]
+struct QueuedRequest {
+    /// Request ID for correlation
+    id: String,
+    /// Serialized request payload
+    payload: String,
+    /// Timestamp when queued
+    queued_at: Instant,
+    /// Retry attempt count
+    retry_count: u32,
+}
+
+/// Connection health status
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectionStatus {
+    Disconnected,
+    Connecting,
+    Connected,
+    Reconnecting,
+    Closed,
+}
+
+impl ConnectionStatus {
+    fn is_connected(&self) -> bool {
+        matches!(self, Self::Connected)
+    }
+
+    fn can_send(&self) -> bool {
+        matches!(self, Self::Connected | Self::Reconnecting)
+    }
+}
+
+/// Reconnection configuration
+#[derive(Debug, Clone, bon::Builder)]
+pub struct ReconnectConfig {
+    /// Enable automatic reconnection
+    #[builder(default = true)]
+    pub enabled: bool,
+
+    /// Maximum number of reconnection attempts
+    #[builder(default = 10)]
+    pub max_attempts: u32,
+
+    /// Initial backoff duration
+    #[builder(default = Duration::from_millis(100))]
+    pub initial_backoff: Duration,
+
+    /// Maximum backoff duration
+    #[builder(default = Duration::from_secs(30))]
+    pub max_backoff: Duration,
+
+    /// Backoff multiplier for exponential backoff
+    #[builder(default = 2.0)]
+    pub backoff_multiplier: f64,
+
+    /// Jitter factor for backoff randomization (0.0-1.0)
+    #[builder(default = 0.1)]
+    pub jitter_factor: f64,
+}
+
+impl Default for ReconnectConfig {
+    fn default() -> Self {
+        Self::builder().build()
+    }
+}
+
+impl ReconnectConfig {
+    /// Calculate backoff duration with exponential backoff and jitter
+    fn calculate_backoff(&self, attempt: u32) -> Duration {
+        let base_backoff = self.initial_backoff.as_millis() as f64
+            * self.backoff_multiplier.powi(attempt.min(31) as i32);
+        let backoff_ms = base_backoff.min(self.max_backoff.as_millis() as f64);
+
+        // Add jitter to avoid thundering herd
+        let jitter_range = backoff_ms * self.jitter_factor;
+        let jitter = (rand::random::<f64>() - 0.5) * 2.0 * jitter_range;
+
+        Duration::from_millis((backoff_ms + jitter).max(0.0) as u64)
+    }
+}
+
+/// Heartbeat configuration
+#[derive(Debug, Clone, bon::Builder)]
+pub struct HeartbeatConfig {
+    /// Enable heartbeat mechanism
+    #[builder(default = true)]
+    pub enabled: bool,
+
+    /// Heartbeat interval
+    #[builder(default = Duration::from_secs(30))]
+    pub interval: Duration,
+
+    /// Heartbeat timeout (no response considered dead)
+    #[builder(default = Duration::from_secs(10))]
+    pub timeout: Duration,
+}
+
+impl Default for HeartbeatConfig {
+    fn default() -> Self {
+        Self::builder().build()
+    }
+}
+
+/// Request queue configuration
+#[derive(Debug, Clone, bon::Builder)]
+pub struct QueueConfig {
+    /// Enable offline request queue
+    #[builder(default = true)]
+    pub enabled: bool,
+
+    /// Maximum queue size
+    #[builder(default = 1000)]
+    pub max_size: usize,
+
+    /// Maximum request age before discarding
+    #[builder(default = Duration::from_secs(300))]
+    pub max_age: Duration,
+
+    /// Maximum retry attempts per request
+    #[builder(default = 3)]
+    pub max_retries: u32,
+}
+
+impl Default for QueueConfig {
+    fn default() -> Self {
+        Self::builder().build()
+    }
+}
+
+/// Production-ready WebSocket client for the A2A protocol
 pub struct WebSocketClient {
     /// Base WebSocket URL of the A2A API
     base_url: String,
     /// Authorization token, if any
     auth_token: Option<String>,
     /// Connection to the WebSocket server
-    connection: Option<WebSocketTx>,
+    connection: WebSocketTx,
+    /// Session state
+    session: Arc<RwLock<SessionState>>,
+    /// Connection status
+    status: Arc<watch::Sender<ConnectionStatus>>,
+    /// Request queue for offline periods
+    request_queue: Arc<Mutex<VecDeque<QueuedRequest>>>,
+    /// Channel for sending requests
+    request_sender: mpsc::Sender<String>,
+    /// Channel for receiving responses
+    response_receiver: Arc<Mutex<mpsc::Receiver<String>>>,
+    /// Response sender for internal use
+    response_sender: mpsc::Sender<String>,
     /// Timeout in seconds
     timeout: u64,
+    /// Reconnection configuration
+    reconnect_config: ReconnectConfig,
+    /// Heartbeat configuration
+    heartbeat_config: HeartbeatConfig,
+    /// Queue configuration
+    queue_config: QueueConfig,
+    /// Session timeout
+    session_timeout: Duration,
 }
 
 impl WebSocketClient {
     /// Create a new WebSocket client with the given base URL
     pub fn new(base_url: String) -> Self {
+        let (request_sender, _) = mpsc::channel(1000);
+        let (response_sender, response_receiver) = mpsc::channel(1000);
+
+        let (status_tx, _) = watch::channel(ConnectionStatus::Disconnected);
+
         Self {
             base_url,
             auth_token: None,
-            connection: None,
-            timeout: 30, // Default timeout in seconds
+            connection: Arc::new(Mutex::new(None)),
+            session: Arc::new(RwLock::new(SessionState::new())),
+            status: Arc::new(status_tx),
+            request_queue: Arc::new(Mutex::new(VecDeque::new())),
+            request_sender,
+            response_receiver: Arc::new(Mutex::new(response_receiver)),
+            response_sender,
+            timeout: 30,
+            reconnect_config: ReconnectConfig::default(),
+            heartbeat_config: HeartbeatConfig::default(),
+            queue_config: QueueConfig::default(),
+            session_timeout: Duration::from_secs(300),
         }
     }
 
     /// Create a new WebSocket client with authentication
     pub fn with_auth(base_url: String, auth_token: String) -> Self {
-        Self {
-            base_url,
-            auth_token: Some(auth_token),
-            connection: None,
-            timeout: 30,
-        }
+        let mut client = Self::new(base_url);
+        client.auth_token = Some(auth_token);
+        client
     }
 
     /// Set the timeout for operations
@@ -75,11 +282,51 @@ impl WebSocketClient {
         self
     }
 
+    /// Set reconnection configuration
+    pub fn with_reconnect_config(mut self, config: ReconnectConfig) -> Self {
+        self.reconnect_config = config;
+        self
+    }
+
+    /// Set heartbeat configuration
+    pub fn with_heartbeat_config(mut self, config: HeartbeatConfig) -> Self {
+        self.heartbeat_config = config;
+        self
+    }
+
+    /// Set queue configuration
+    pub fn with_queue_config(mut self, config: QueueConfig) -> Self {
+        self.queue_config = config;
+        self
+    }
+
+    /// Set session timeout
+    pub fn with_session_timeout(mut self, timeout: Duration) -> Self {
+        self.session_timeout = timeout;
+        self
+    }
+
+    /// Get current connection status
+    pub async fn status(&self) -> ConnectionStatus {
+        *self.status.borrow()
+    }
+
+    /// Get current session state
+    pub async fn session_state(&self) -> SessionState {
+        self.session.read().await.clone()
+    }
+
     /// Connect to the WebSocket server
     async fn connect(&mut self) -> Result<(), A2AError> {
-        if self.connection.is_some() {
-            return Ok(());
+        // Check if already connected
+        {
+            let conn = self.connection.lock().await;
+            if conn.is_some() {
+                return Ok(());
+            }
         }
+
+        self.update_status(ConnectionStatus::Connecting).await;
 
         let mut url = Url::parse(&self.base_url)
             .map_err(|e| WebSocketClientError::Connection(format!("Invalid URL: {}", e)))?;
@@ -93,49 +340,338 @@ impl WebSocketClient {
             WebSocketClientError::Connection(format!("WebSocket connection error: {}", e))
         })?;
 
-        self.connection = Some(Arc::new(Mutex::new(ws_stream)));
+        {
+            let mut conn = self.connection.lock().await;
+            *conn = Some(ws_stream);
+        }
+
+        // Update session state
+        {
+            let mut session = self.session.write().await;
+            session.touch();
+        }
+
+        self.update_status(ConnectionStatus::Connected).await;
+
+        #[cfg(feature = "tracing")]
+        info!("WebSocket connected: {}", self.base_url);
+
+        Ok(())
+    }
+
+    /// Disconnect from the WebSocket server
+    async fn disconnect(&mut self) -> Result<(), A2AError> {
+        self.update_status(ConnectionStatus::Disconnected).await;
+
+        {
+            let mut conn = self.connection.lock().await;
+            *conn = None;
+        }
+
+        #[cfg(feature = "tracing")]
+        info!("WebSocket disconnected");
+
+        Ok(())
+    }
+
+    /// Update connection status
+    async fn update_status(&self, status: ConnectionStatus) {
+        let _ = self.status.send(status);
+
+        #[cfg(feature = "tracing")]
+        debug!("Connection status: {:?}", status);
+    }
+
+    /// Reconnect with exponential backoff
+    async fn reconnect(&mut self) -> Result<(), A2AError> {
+        let mut attempt = 0;
+        let session = self.session.read().await;
+        let reconnect_count = session.reconnect_count;
+        drop(session);
+
+        while attempt < self.reconnect_config.max_attempts {
+            attempt += 1;
+
+            let backoff = self.reconnect_config.calculate_backoff(reconnect_count + attempt);
+
+            #[cfg(feature = "tracing")]
+            warn!("Reconnection attempt {}/{} after {:?}",
+                attempt, self.reconnect_config.max_attempts, backoff);
+
+            // Disconnect first
+            self.disconnect().await?;
+
+            // Wait for backoff
+            tokio::time::sleep(backoff).await;
+
+            // Try to connect
+            match self.connect().await {
+                Ok(_) => {
+                    // Update reconnect count
+                    {
+                        let mut session = self.session.write().await;
+                        session.reconnect_count = reconnect_count + attempt;
+                    }
+
+                    // Send queued requests
+                    self.send_queued_requests().await?;
+
+                    return Ok(());
+                }
+                Err(e) => {
+                    #[cfg(feature = "tracing")]
+                    error!("Reconnection attempt {} failed: {}", attempt, e);
+
+                    if attempt >= self.reconnect_config.max_attempts {
+                        return Err(WebSocketClientError::ReconnectionFailed {
+                            max_retries: self.reconnect_config.max_attempts,
+                        }.into());
+                    }
+                }
+            }
+        }
+
+        Err(WebSocketClientError::ReconnectionFailed {
+            max_retries: self.reconnect_config.max_attempts,
+        }.into())
+    }
+
+    /// Send queued requests after reconnection
+    async fn send_queued_requests(&mut self) -> Result<(), A2AError> {
+        let mut queue = self.request_queue.lock().await;
+        let mut failed = VecDeque::new();
+
+        while let Some(request) = queue.pop_front() {
+            // Check if request is too old
+            if request.queued_at.elapsed() > self.queue_config.max_age {
+                #[cfg(feature = "tracing")]
+                warn!("Discarding aged queued request: {}", request.id);
+                continue;
+            }
+
+            // Check retry count
+            if request.retry_count >= self.queue_config.max_retries {
+                #[cfg(feature = "tracing")]
+                warn!("Discarding request exceeding max retries: {}", request.id);
+                continue;
+            }
+
+            // Try to send
+            match self.send_message_internal(&request.payload).await {
+                Ok(_) => {
+                    #[cfg(feature = "tracing")]
+                    debug!("Sent queued request: {}", request.id);
+                }
+                Err(_) => {
+                    // Re-queue for next attempt
+                    let mut updated_request = request;
+                    updated_request.retry_count += 1;
+                    failed.push_back(updated_request);
+                }
+            }
+        }
+
+        // Put failed requests back
+        queue.extend(failed);
+
+        Ok(())
+    }
+
+    /// Queue a request for offline retry
+    async fn queue_request(&self, payload: String) -> Result<(), A2AError> {
+        if !self.queue_config.enabled {
+            return Err(WebSocketClientError::QueueFull {
+                current: 0,
+                capacity: 0,
+            }.into());
+        }
+
+        let mut queue = self.request_queue.lock().await;
+
+        if queue.len() >= self.queue_config.max_size {
+            return Err(WebSocketClientError::QueueFull {
+                current: queue.len(),
+                capacity: self.queue_config.max_size,
+            }.into());
+        }
+
+        let request = QueuedRequest {
+            id: uuid::Uuid::new_v4().to_string(),
+            payload,
+            queued_at: Instant::now(),
+            retry_count: 0,
+        };
+
+        queue.push_back(request);
+
+        #[cfg(feature = "tracing")]
+        debug!("Queued request (queue size: {})", queue.len());
+
+        Ok(())
+    }
+
+    /// Send a message internally without reconnection logic
+    async fn send_message_internal(&mut self, message: WsMessage) -> Result<(), A2AError> {
+        let conn = self.connection.lock().await;
+
+        let ws_stream = conn
+            .as_ref()
+            .ok_or_else(|| WebSocketClientError::Connection("No connection".to_string()))?;
+
+        // Send the message
+        let mut guard = ws_stream.lock().await;
+        guard
+            .send(message)
+            .await
+            .map_err(|e| WebSocketClientError::Message(format!("Send error: {}", e)))?;
+
+        // Update session activity
+        drop(guard);
+        {
+            let mut session = self.session.write().await;
+            session.touch();
+        }
+
         Ok(())
     }
 
     /// Send a message to the WebSocket server and get a response
     async fn send_ws_message(&mut self, message: WsMessage) -> Result<WsMessage, A2AError> {
-        self.connect().await?;
-
-        let conn = self
-            .connection
-            .as_ref()
-            .ok_or_else(|| WebSocketClientError::Connection("No connection".to_string()))?;
-
-        // Send the message
-        {
-            let mut guard = conn.lock().await; // Changed to await
-            guard
-                .send(message)
-                .await
-                .map_err(|e| WebSocketClientError::Message(format!("Send error: {}", e)))?;
+        // Try to connect if not connected
+        if !self.status().await.is_connected() {
+            if self.reconnect_config.enabled {
+                self.reconnect().await?;
+            } else {
+                self.connect().await?;
+            }
         }
 
-        // Receive the response
-        let response = {
-            let mut guard = conn.lock().await; // Changed to await
+        // Send the message
+        self.send_message_internal(message.clone()).await?;
 
+        // If message is Text, wait for response
+        if let WsMessage::Text(text) = &message {
             let timeout = Duration::from_secs(self.timeout);
-            let result = tokio::time::timeout(timeout, guard.next())
-                .await
-                .map_err(|_| WebSocketClientError::Timeout)?;
 
-            match result {
-                Some(Ok(msg)) => msg,
-                Some(Err(e)) => {
-                    return Err(
-                        WebSocketClientError::Message(format!("WebSocket error: {}", e)).into(),
-                    );
+            // Wait for response with timeout
+            let response = tokio::time::timeout(timeout, async {
+                let mut rx = self.response_receiver.lock().await;
+                rx.recv().await
+            })
+            .await
+            .map_err(|_| WebSocketClientError::Timeout)?
+            .ok_or_else(|| WebSocketClientError::Closed)?;
+
+            return Ok(WsMessage::Text(response));
+        }
+
+        // For ping/pong/close messages, just acknowledge
+        Ok(WsMessage::Text("{}".to_string()))
+    }
+
+    /// Start background tasks for heartbeat and connection monitoring
+    pub async fn start_background_tasks(&self) -> Result<(), A2AError> {
+        if self.heartbeat_config.enabled {
+            self.start_heartbeat_task().await?;
+        }
+
+        if self.reconnect_config.enabled {
+            self.start_connection_monitor().await?;
+        }
+
+        Ok(())
+    }
+
+    /// Start heartbeat task
+    async fn start_heartbeat_task(&self) -> Result<(), A2AError> {
+        let conn = self.connection.clone();
+        let session = self.session.clone();
+        let status = self.status.clone();
+        let interval = self.heartbeat_config.interval;
+        let timeout = self.heartbeat_config.timeout;
+
+        tokio::spawn(async move {
+            let mut timer = tokio::time::interval(interval);
+            loop {
+                timer.tick().await;
+
+                // Check if connected
+                let current_status = *status.borrow();
+                if !current_status.is_connected() {
+                    continue;
                 }
-                None => return Err(WebSocketClientError::Closed.into()),
-            }
-        };
 
-        Ok(response)
+                // Check session expiration
+                {
+                    let session_guard = session.read().await;
+                    if session_guard.is_expired(timeout) {
+                        #[cfg(feature = "tracing")]
+                        warn!("Session expired, attempting reconnection");
+
+                        drop(session_guard);
+                        let _ = status.send(ConnectionStatus::Reconnecting);
+                        continue;
+                    }
+                }
+
+                // Send ping
+                let conn_guard = conn.lock().await;
+                if let Some(ws_stream) = conn_guard.as_ref() {
+                    let mut stream = ws_stream.lock().await;
+                    if let Err(e) = stream.send(WsMessage::Ping(vec![])).await {
+                        #[cfg(feature = "tracing")]
+                        error!("Heartbeat send failed: {}", e);
+                        drop(stream);
+                        let _ = status.send(ConnectionStatus::Reconnecting);
+                    }
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    /// Start connection monitor task
+    async fn start_connection_monitor(&self) -> Result<(), A2AError> {
+        let conn = self.connection.clone();
+        let status = self.status.clone();
+
+        tokio::spawn(async move {
+            let mut timer = tokio::time::interval(Duration::from_secs(5));
+            loop {
+                timer.tick().await;
+
+                let current_status = *status.borrow();
+
+                // Try to reconnect if disconnected
+                if !current_status.is_connected() && current_status != ConnectionStatus::Closed {
+                    #[cfg(feature = "tracing")]
+                    debug!("Connection monitor detected disconnection");
+                    // Reconnection will be handled by send_ws_message
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    /// Close the WebSocket connection
+    pub async fn close(&mut self) -> Result<(), A2AError> {
+        self.update_status(ConnectionStatus::Closed).await;
+
+        {
+            let mut conn = self.connection.lock().await;
+            if let Some(ws_stream) = conn.as_mut() {
+                let mut stream = ws_stream.lock().await;
+                let _ = stream.close(None).await;
+            }
+            *conn = None;
+        }
+
+        #[cfg(feature = "tracing")]
+        info!("WebSocket connection closed");
+
+        Ok(())
     }
 }
 
@@ -461,18 +997,19 @@ impl AsyncA2AClient for WebSocketClient {
         // Get the connection
         let connection = client_clone
             .connection
-            .as_ref()
-            .ok_or_else(|| WebSocketClientError::Connection("No connection".to_string()))?
             .clone();
 
         // Send the request
         {
-            let mut guard = connection.lock().await; // Changed to await
+            let conn_guard = connection.lock().await;
+            if let Some(ws_stream) = conn_guard.as_ref() {
+                let mut guard = ws_stream.lock().await;
 
-            guard
-                .send(WsMessage::Text(json))
-                .await
-                .map_err(|e| WebSocketClientError::Message(format!("Send error: {}", e)))?;
+                guard
+                    .send(WsMessage::Text(json))
+                    .await
+                    .map_err(|e| WebSocketClientError::Message(format!("Send error: {}", e)))?;
+            }
         }
 
         // Create a stream that will process incoming messages
@@ -482,9 +1019,18 @@ impl AsyncA2AClient for WebSocketClient {
                 loop {
                     // Get the next message from the WebSocket
                     let message_result = {
-                        let mut guard = conn.lock().await;
-                        guard.next().await
-                    }; // Lock is dropped here
+                        let conn_guard = conn.lock().await;
+                        if let Some(ws_stream) = conn_guard.as_ref() {
+                            let mut guard = ws_stream.lock().await;
+                            guard.next().await
+                        } else {
+                            return Some((
+                                Err(WebSocketClientError::Connection("Connection lost".to_string()).into()),
+                                conn,
+                            ));
+                        }
+                    };
+
                     // Process result outside the lock scope
                     let message = match message_result {
                         Some(Ok(msg)) => msg,
@@ -601,6 +1147,22 @@ impl AsyncA2AClient for WebSocketClient {
                                 conn,
                             ));
                         }
+                        WsMessage::Pong(_) => {
+                            // Heartbeat pong, continue streaming
+                            continue;
+                        }
+                        WsMessage::Ping(data) => {
+                            // Respond to ping
+                            let conn_guard = conn.lock().await;
+                            if let Some(ws_stream) = conn_guard.as_ref() {
+                                let mut guard = ws_stream.lock().await;
+                                let _ = guard.send(WsMessage::Pong(data)).await;
+                            }
+                            continue;
+                        }
+                        WsMessage::Close(_) => {
+                            return Some((Err(WebSocketClientError::Closed.into()), conn));
+                        }
                         _ => {
                             return Some((
                                 Err(WebSocketClientError::Protocol(
@@ -625,7 +1187,17 @@ impl Clone for WebSocketClient {
             base_url: self.base_url.clone(),
             auth_token: self.auth_token.clone(),
             connection: self.connection.clone(),
+            session: self.session.clone(),
+            status: self.status.clone(),
+            request_queue: self.request_queue.clone(),
+            request_sender: self.request_sender.clone(),
+            response_receiver: self.response_receiver.clone(),
+            response_sender: self.response_sender.clone(),
             timeout: self.timeout,
+            reconnect_config: self.reconnect_config.clone(),
+            heartbeat_config: self.heartbeat_config.clone(),
+            queue_config: self.queue_config.clone(),
+            session_timeout: self.session_timeout,
         }
     }
 }

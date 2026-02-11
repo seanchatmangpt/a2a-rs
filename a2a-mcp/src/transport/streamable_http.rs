@@ -31,8 +31,8 @@ use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
     response::{
-        IntoResponse, Response,
-        sse::{Event, KeepAlive, Sse},
+        IntoResponse,
+        sse::{Event, Sse},
     },
     routing::{get, post},
 };

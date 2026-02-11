@@ -33,6 +33,11 @@ pub use auth::{ApiKeyAuthenticator, BearerTokenAuthenticator, NoopAuthenticator}
 pub use auth::{JwtAuthenticator, OAuth2Authenticator, OpenIdConnectAuthenticator};
 #[cfg(all(feature = "server", feature = "http-client"))]
 pub use business::HttpPushNotificationSender;
+#[cfg(all(feature = "server", feature = "http-client"))]
+pub use business::{
+    DeadLetterEntry, DeliveryStatus, EnhancedHttpPushNotificationSender,
+    HttpPushNotificationConfig, InMemoryDeadLetterQueue, InMemoryDeliveryTracker,
+};
 #[cfg(feature = "server")]
 pub use business::{AdmissionConfig, DefaultAdmissionController};
 #[cfg(feature = "server")]

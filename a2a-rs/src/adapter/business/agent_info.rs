@@ -40,6 +40,8 @@ impl SimpleAgentInfo {
                 skills: Vec::new(),
                 signatures: None,
                 supports_authenticated_extended_card: None,
+                #[cfg(feature = "crypto")]
+                receipts: None,
             },
         }
     }

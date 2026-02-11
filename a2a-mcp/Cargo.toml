@@ -38,8 +38,9 @@ a2a-rs = { path = "../a2a-rs" }
 reqwest = { version = "0.12", features = ["json"], optional = true }
 
 [features]
-default = []
+default = ["tracing"]
 client = ["reqwest"]
+tracing = []
 
 [dev-dependencies]
 tracing-subscriber = "0.3"

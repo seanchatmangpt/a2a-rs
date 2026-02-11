@@ -19,7 +19,13 @@ pub mod server;
 pub mod receipt;
 
 #[cfg(feature = "client")]
-pub use client::{AsyncA2AClient, StreamItem};
+pub use client::{
+    A2AClientConfig, AsyncA2AClient, BatchClientOperations, BatchConfig, EnhancedHttpClient,
+    PoolConfig, RetryConfig, StreamItem, TokenInfo, TokenRefreshConfig,
+};
+
+#[cfg(feature = "client")]
+pub use client::{StreamItem};
 
 #[cfg(feature = "server")]
 pub use coordinator::{

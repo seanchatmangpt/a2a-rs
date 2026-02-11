@@ -56,6 +56,22 @@ pub enum WebSocketClientError {
     /// Connection closed
     #[error("Connection closed")]
     Closed,
+
+    /// Reconnection failed after maximum retries
+    #[error("Reconnection failed after {max_retries} attempts")]
+    ReconnectionFailed { max_retries: u32 },
+
+    /// Session expired
+    #[error("Session expired")]
+    SessionExpired,
+
+    /// Heartbeat timeout
+    #[error("Heartbeat timeout after {seconds}s")]
+    HeartbeatTimeout { seconds: u64 },
+
+    /// Request queue full
+    #[error("Request queue full ({current}/{capacity} items)")]
+    QueueFull { current: usize, capacity: usize },
 }
 
 // Conversion from adapter errors to domain errors
@@ -93,6 +109,18 @@ impl From<WebSocketClientError> for A2AError {
             WebSocketClientError::Timeout => A2AError::Internal("WebSocket timeout".to_string()),
             WebSocketClientError::Closed => {
                 A2AError::Internal("WebSocket connection closed".to_string())
+            }
+            WebSocketClientError::ReconnectionFailed { max_retries } => {
+                A2AError::Internal(format!("WebSocket reconnection failed after {} attempts", max_retries))
+            }
+            WebSocketClientError::SessionExpired => {
+                A2AError::Internal("WebSocket session expired".to_string())
+            }
+            WebSocketClientError::HeartbeatTimeout { seconds } => {
+                A2AError::Internal(format!("WebSocket heartbeat timeout after {}s", seconds))
+            }
+            WebSocketClientError::QueueFull { current, capacity } => {
+                A2AError::Internal(format!("WebSocket request queue full: {}/{}", current, capacity))
             }
         }
     }

@@ -74,18 +74,3 @@ pub use server::{RequestContext, RmcpA2aServer, StreamableHttpServer};
 // Version information
 /// Current crate version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-// Simple placeholder for now
-pub fn add(a: i32, b: i32) -> i32 {
-    a + b
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_add() {
-        assert_eq!(add(2, 2), 4);
-    }
-}

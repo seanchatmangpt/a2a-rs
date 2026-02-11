@@ -16,7 +16,7 @@ use axum::{
     middleware::{self, Next},
     response::{
         IntoResponse, Response,
-        sse::{Event, KeepAlive, Sse},
+        sse::{Event, Sse},
     },
     routing::{get, post},
 };
@@ -30,7 +30,7 @@ use uuid::Uuid;
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::adapter::{InMemorySessionManager, OriginGuard};
-use crate::application::{JsonRpcRequest, JsonRpcResponse, McpTaskHandler};
+use crate::application::{JsonRpcRequest, McpTaskHandler};
 use crate::domain::Session;
 use crate::error::Error;
 use crate::port::{OriginValidator, SessionManager};

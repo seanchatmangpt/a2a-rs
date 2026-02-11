@@ -130,6 +130,15 @@ pub use adapter::{JwtAuthenticator, OAuth2Authenticator, OpenIdConnectAuthentica
 pub use port::Authenticator;
 
 #[cfg(feature = "crypto")]
+pub use services::receipt::{
+    AgentCardSigner, MerkleTree, Receipt, ReceiptChain, ReceiptError, ReceiptResult, ReplayValidator,
+};
+
+#[cfg(feature = "http-client")]
+pub use services::{EnhancedHttpClient, BatchClientOperations};
+
+#[cfg(feature = "client")]
 pub use services::{
-    MerkleTree, Receipt, ReceiptChain, ReceiptError, ReceiptResult, ReplayValidator,
+    A2AClientConfig, AsyncA2AClient, BatchConfig, EnhancedHttpClient, PoolConfig,
+    RetryConfig, StreamItem, TokenInfo, TokenRefreshConfig,
 };

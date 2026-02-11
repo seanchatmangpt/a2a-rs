@@ -14,6 +14,9 @@ use super::{
 #[cfg(feature = "tracing")]
 use crate::measure_duration;
 
+#[cfg(feature = "crypto")]
+use crate::services::Receipt;
+
 /// States a task can be in during its lifecycle.
 ///
 /// Tasks progress through various states from submission to completion:
@@ -84,6 +87,7 @@ impl Default for TaskStatus {
 /// - Optional artifacts produced during processing
 /// - Optional message history for the conversation
 /// - Optional metadata for additional context
+/// - Optional cryptographic receipts for verification (crypto feature)
 ///
 /// # Example
 /// ```rust
@@ -114,6 +118,10 @@ pub struct Task {
     pub metadata: Option<Map<String, Value>>,
     #[builder(default = "task".to_string())]
     pub kind: String, // Always "task"
+    /// Cryptographic receipts for artifact verification (crypto feature)
+    #[cfg(feature = "crypto")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receipts: Option<Vec<Receipt>>,
 }
 
 /// Parameters for identifying a task by ID.
@@ -323,12 +331,35 @@ impl Task {
             history: None,
             metadata: None,
             kind: "task".to_string(),
+            #[cfg(feature = "crypto")]
+            receipts: None,
         }
     }
 
     /// Create a new task with the given ID and context ID in the submitted state
     pub fn with_context(id: String, context_id: String) -> Self {
         Self::new(id, context_id)
+    }
+
+    /// Add a cryptographic receipt for this task (crypto feature)
+    #[cfg(feature = "crypto")]
+    #[cfg_attr(feature = "tracing", instrument(skip(self, receipt), fields(
+        task.id = %self.id,
+        receipt.ontology_hash = %&receipt.ontology_hash[..16],
+        receipt.output_hash = %&receipt.output_hash[..16]
+    )))]
+    pub fn add_receipt(&mut self, receipt: Receipt) {
+        if let Some(receipts) = &mut self.receipts {
+            receipts.push(receipt);
+        } else {
+            self.receipts = Some(vec![receipt]);
+        }
+    }
+
+    /// Get all receipts for this task (crypto feature)
+    #[cfg(feature = "crypto")]
+    pub fn receipts(&self) -> Option<&[Receipt]> {
+        self.receipts.as_deref()
     }
 
     /// Update the task status

@@ -5,7 +5,7 @@ mod origin_guard;
 pub mod session_manager;
 pub mod sse_manager;
 pub mod task_wrapper;
-mod tool_to_agent;
+pub mod tool_to_agent;
 
 pub use agent_to_tool::AgentToToolAdapter;
 pub use origin_guard::OriginGuard;

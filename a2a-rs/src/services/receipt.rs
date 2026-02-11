@@ -18,6 +18,9 @@ use thiserror::Error;
 #[cfg(feature = "crypto")]
 use bon::Builder;
 
+#[cfg(feature = "crypto")]
+use crate::domain::core::message::Artifact;
+
 /// Errors that can occur during receipt operations
 #[derive(Error, Debug)]
 pub enum ReceiptError {
@@ -147,6 +150,32 @@ impl Receipt {
         hasher.update(data);
         hex::encode(hasher.finalize())
     }
+
+    /// Create a receipt from an artifact
+    ///
+    /// This integrates receipts with the artifact system by computing
+    /// hashes from the artifact's serialized representation.
+    pub fn from_artifact(
+        artifact: &Artifact,
+        ontology_hash: String,
+        signing_key: &SigningKey,
+    ) -> ReceiptResult<Self> {
+        let artifact_json = serde_json::to_vec(artifact)
+            .map_err(|e| ReceiptError::InvalidData(e.to_string()))?;
+
+        let output_hash = Self::hash_data(&artifact_json);
+
+        Self::new(ontology_hash, output_hash, signing_key, None)
+    }
+
+    /// Verify this receipt matches an artifact's hash
+    pub fn verify_artifact(&self, artifact: &Artifact) -> ReceiptResult<bool> {
+        let artifact_json = serde_json::to_vec(artifact)
+            .map_err(|e| ReceiptError::InvalidData(e.to_string()))?;
+
+        let computed_hash = Self::hash_data(&artifact_json);
+        Ok(self.output_hash == computed_hash)
+    }
 }
 
 /// A chain of receipts linked by hash pointers
@@ -239,6 +268,43 @@ impl ReceiptChain {
     /// Get a specific receipt by index
     pub fn get(&self, index: usize) -> Option<&Receipt> {
         self.receipts.get(index)
+    }
+
+    /// Add a receipt from an artifact to the chain
+    pub fn add_artifact_receipt(
+        &mut self,
+        artifact: &Artifact,
+        ontology_hash: String,
+        signing_key: &SigningKey,
+    ) -> ReceiptResult<()> {
+        let receipt = Receipt::from_artifact(artifact, ontology_hash, signing_key)?;
+        self.add_receipt(receipt);
+        Ok(())
+    }
+
+    /// Verify that a receipt chain contains valid artifact receipts
+    pub fn verify_artifact_chain(
+        &self,
+        artifacts: &[Artifact],
+        verifying_key: &VerifyingKey,
+    ) -> ReceiptResult<()> {
+        // First verify the chain signatures
+        self.verify_chain(verifying_key)?;
+
+        // Then verify each receipt matches its artifact
+        for (receipt, artifact) in self.receipts.iter().zip(artifacts.iter()) {
+            if !receipt.verify_artifact(artifact)? {
+                return Err(ReceiptError::InvalidHash {
+                    expected: receipt.output_hash.clone(),
+                    actual: format!(
+                        "{}",
+                        &receipt.compute_hash()[..16]
+                    ),
+                });
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -492,9 +558,82 @@ impl Default for ReplayValidator {
     }
 }
 
+/// Agent card signing utilities (crypto feature)
+///
+/// Provides functions for signing agent cards with receipts to establish
+/// cryptographic provenance and integrity verification.
+#[cfg(feature = "crypto")]
+pub struct AgentCardSigner;
+
+#[cfg(feature = "crypto")]
+impl AgentCardSigner {
+    /// Sign an agent card with a receipt proving its artifact history
+    ///
+    /// This creates a receipt that links the agent card's hash to
+    /// its artifact generation history, establishing verifiable provenance.
+    pub fn sign_agent_card(
+        agent_card_hash: String,
+        artifact_hashes: Vec<String>,
+        signing_key: &SigningKey,
+    ) -> ReceiptResult<Receipt> {
+        // Compute combined hash of all artifacts
+        let mut combined_hasher = Sha256::new();
+        for hash in &artifact_hashes {
+            combined_hasher.update(hash.as_bytes());
+        }
+        let artifacts_hash = hex::encode(combined_hasher.finalize());
+
+        Receipt::new(agent_card_hash, artifacts_hash, signing_key, None)
+    }
+
+    /// Verify an agent card's receipt chain
+    ///
+    /// Ensures that the agent card has valid receipts proving
+    /// its artifact generation history.
+    pub fn verify_agent_card(
+        agent_card_hash: &str,
+        receipts: &[Receipt],
+        verifying_key: &VerifyingKey,
+    ) -> ReceiptResult<()> {
+        if receipts.is_empty() {
+            return Err(ReceiptError::InvalidData(
+                "Agent card has no receipts for verification".to_string(),
+            ));
+        }
+
+        // The first receipt should link the agent card hash to artifact history
+        let first_receipt = &receipts[0];
+
+        if first_receipt.ontology_hash != agent_card_hash {
+            return Err(ReceiptError::InvalidHash {
+                expected: agent_card_hash.to_string(),
+                actual: first_receipt.ontology_hash.clone(),
+            });
+        }
+
+        // Verify the first receipt's signature
+        first_receipt.verify(verifying_key)?;
+
+        // If there are more receipts, verify the full chain
+        if receipts.len() > 1 {
+            let chain = ReceiptChain {
+                receipts: receipts.to_vec(),
+                hash_pointers: receipts
+                    .windows(2)
+                    .map(|w| w[0].compute_hash())
+                    .collect(),
+            };
+            chain.verify_chain(verifying_key)?;
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(all(test, feature = "crypto"))]
 mod tests {
     use super::*;
+    use crate::domain::core::message::{Artifact, Part};
     use rand::RngCore;
 
     fn generate_keypair() -> (SigningKey, VerifyingKey) {
@@ -621,5 +760,167 @@ mod tests {
             .expect("Failed to create receipt");
 
         assert!(validator.validate_replay(0, &new_receipt).is_err());
+    }
+
+    #[test]
+    fn test_receipt_from_artifact() {
+        let (signing_key, verifying_key) = generate_keypair();
+
+        // Create an artifact
+        let artifact = Artifact {
+            artifact_id: "artifact-123".to_string(),
+            name: Some("Test Artifact".to_string()),
+            description: Some("A test artifact for receipt verification".to_string()),
+            parts: vec![Part::Text {
+                text: "Test content".to_string(),
+                metadata: None,
+            }],
+            metadata: None,
+            extensions: None,
+        };
+
+        // Create receipt from artifact
+        let ontology_hash = Receipt::hash_data(b"test-ontology");
+        let receipt = Receipt::from_artifact(&artifact, ontology_hash, &signing_key)
+            .expect("Failed to create receipt from artifact");
+
+        // Verify the receipt
+        assert!(receipt.verify(&verifying_key).is_ok());
+
+        // Verify receipt matches artifact
+        assert!(receipt.verify_artifact(&artifact).expect("Failed to verify artifact"));
+
+        // Tamper with artifact and verify detection
+        let tampered_artifact = Artifact {
+            artifact_id: artifact.artifact_id.clone(),
+            name: artifact.name.clone(),
+            description: artifact.description.clone(),
+            parts: vec![Part::Text {
+                text: "Tampered content".to_string(),
+                metadata: None,
+            }],
+            metadata: None,
+            extensions: None,
+        };
+
+        assert!(!receipt
+            .verify_artifact(&tampered_artifact)
+            .expect("Failed to verify tampered artifact"));
+    }
+
+    #[test]
+    fn test_receipt_chain_with_artifacts() {
+        let (signing_key, verifying_key) = generate_keypair();
+        let mut chain = ReceiptChain::new();
+
+        // Create multiple artifacts
+        let mut artifacts = Vec::new();
+        for i in 0..3 {
+            let artifact = Artifact {
+                artifact_id: format!("artifact-{}", i),
+                name: Some(format!("Artifact {}", i)),
+                description: Some(format!("Test artifact {}", i)),
+                parts: vec![Part::Text {
+                    text: format!("Content {}", i),
+                    metadata: None,
+                }],
+                metadata: None,
+                extensions: None,
+            };
+
+            let ontology_hash = Receipt::hash_data(format!("ontology-{}", i).as_bytes());
+            chain
+                .add_artifact_receipt(&artifact, ontology_hash, &signing_key)
+                .expect("Failed to add artifact receipt");
+            artifacts.push(artifact);
+        }
+
+        // Verify the chain with artifacts
+        assert!(chain.verify_artifact_chain(&artifacts, &verifying_key).is_ok());
+    }
+
+    #[test]
+    fn test_agent_card_signing() {
+        let (signing_key, verifying_key) = generate_keypair();
+
+        // Simulate agent card and artifact hashes
+        let agent_card_hash = Receipt::hash_data(b"agent-card-data");
+        let artifact_hashes = vec![
+            Receipt::hash_data(b"artifact-1"),
+            Receipt::hash_data(b"artifact-2"),
+            Receipt::hash_data(b"artifact-3"),
+        ];
+
+        // Sign the agent card
+        let receipt = AgentCardSigner::sign_agent_card(
+            agent_card_hash.clone(),
+            artifact_hashes.clone(),
+            &signing_key,
+        )
+        .expect("Failed to sign agent card");
+
+        // Verify the signature
+        assert!(receipt.verify(&verifying_key).is_ok());
+
+        // Verify the agent card with receipt
+        let receipts = vec![receipt];
+        assert!(AgentCardSigner::verify_agent_card(&agent_card_hash, &receipts, &verifying_key).is_ok());
+    }
+
+    #[test]
+    fn test_agent_card_verification_fails_on_tamper() {
+        let (signing_key, verifying_key) = generate_keypair();
+
+        let agent_card_hash = Receipt::hash_data(b"original-agent-card");
+        let artifact_hashes = vec![Receipt::hash_data(b"artifact-1")];
+
+        let receipt = AgentCardSigner::sign_agent_card(
+            agent_card_hash.clone(),
+            artifact_hashes,
+            &signing_key,
+        )
+        .expect("Failed to sign agent card");
+
+        let receipts = vec![receipt];
+
+        // Try to verify with wrong agent card hash
+        let tampered_hash = Receipt::hash_data(b"tampered-agent-card");
+        assert!(AgentCardSigner::verify_agent_card(&tampered_hash, &receipts, &verifying_key).is_err());
+    }
+
+    #[test]
+    fn test_merkle_tree_with_artifacts() {
+        let (signing_key, _verifying_key) = generate_keypair();
+        let mut receipts = Vec::new();
+
+        // Create receipts from artifacts
+        for i in 0..4 {
+            let artifact = Artifact {
+                artifact_id: format!("artifact-{}", i),
+                name: Some(format!("Artifact {}", i)),
+                description: None,
+                parts: vec![Part::Text {
+                    text: format!("Content {}", i),
+                    metadata: None,
+                }],
+                metadata: None,
+                extensions: None,
+            };
+
+            let ontology_hash = Receipt::hash_data(format!("ontology-{}", i).as_bytes());
+            let receipt = Receipt::from_artifact(&artifact, ontology_hash, &signing_key)
+                .expect("Failed to create receipt");
+            receipts.push(receipt);
+        }
+
+        // Build Merkle tree
+        let tree = MerkleTree::from_receipts(&receipts);
+        let root_hash = tree.root_hash().expect("Should have root hash");
+
+        // Verify each receipt with Merkle proof
+        for receipt in &receipts {
+            let proof = tree.generate_proof(receipt).expect("Failed to generate proof");
+            assert!(MerkleTree::verify_proof(receipt, &proof, &root_hash).is_ok());
+        }
     }
 }

@@ -2,6 +2,12 @@ use bon::Builder;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+#[cfg(feature = "crypto")]
+use crate::services::Receipt;
+
+#[cfg(feature = "crypto")]
+use sha2::Sha256;
+
 /// Supported A2A transport protocols (v0.3.0).
 ///
 /// Defines the transport protocols that agents can use for communication.
@@ -143,6 +149,27 @@ pub enum SecurityScheme {
         #[serde(skip_serializing_if = "Option::is_none")]
         description: Option<String>,
     },
+}
+
+impl SecurityScheme {
+    /// Get OAuth2 flows if this is an OAuth2 scheme
+    pub fn get_oauth2_flows(&self) -> Option<&OAuthFlows> {
+        match self {
+            SecurityScheme::OAuth2 { flows, .. } => Some(flows),
+            _ => None,
+        }
+    }
+
+    /// Get OpenID Connect URL if this is an OIDC scheme
+    pub fn get_openid_connect_url(&self) -> Option<&str> {
+        match self {
+            SecurityScheme::OpenIdConnect {
+                open_id_connect_url,
+                ..
+            } => Some(open_id_connect_url),
+            _ => None,
+        }
+    }
 }
 
 /// OAuth flow configurations supporting multiple authentication flows.
@@ -325,7 +352,25 @@ impl AgentSkill {
     }
 }
 
-/// Card describing an agent's capabilities, metadata, and available skills.\n///\n/// The AgentCard is the primary descriptor for an agent, containing all the\n/// information needed for clients to understand what the agent can do and\n/// how to interact with it. This includes basic metadata like name and version,\n/// capabilities like streaming support, available skills, and security requirements.\n///\n/// # Example\n/// ```rust\n/// use a2a_rs::{AgentCard, AgentCapabilities, AgentSkill};\n/// \n/// let card = AgentCard::builder()\n///     .name(\"My Agent\".to_string())\n///     .description(\"A helpful AI agent\".to_string())\n///     .url(\"https://agent.example.com\".to_string())\n///     .version(\"1.0.0\".to_string())\n///     .capabilities(AgentCapabilities::default())\n///     .build();\n/// ```
+/// Card describing an agent's capabilities, metadata, and available skills.
+///
+/// The AgentCard is the primary descriptor for an agent, containing all the
+/// information needed for clients to understand what the agent can do and
+/// how to interact with it. This includes basic metadata like name and version,
+/// capabilities like streaming support, available skills, and security requirements.
+///
+/// # Example
+/// ```rust
+/// use a2a_rs::{AgentCard, AgentCapabilities, AgentSkill};
+///
+/// let card = AgentCard::builder()
+///     .name("My Agent".to_string())
+///     .description("A helpful AI agent".to_string())
+///     .url("https://agent.example.com".to_string())
+///     .version("1.0.0".to_string())
+///     .capabilities(AgentCapabilities::default())
+///     .build();
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 pub struct AgentCard {
     pub name: String,
@@ -371,6 +416,10 @@ pub struct AgentCard {
         rename = "supportsAuthenticatedExtendedCard"
     )]
     pub supports_authenticated_extended_card: Option<bool>,
+    /// Cryptographic receipts proving artifact generation history (crypto feature)
+    #[cfg(feature = "crypto")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receipts: Option<Vec<Receipt>>,
 }
 
 fn default_input_modes() -> Vec<String> {
@@ -387,6 +436,34 @@ fn default_protocol_version() -> String {
 
 fn default_preferred_transport() -> String {
     "JSONRPC".to_string()
+}
+
+impl AgentCard {
+    /// Add a cryptographic receipt to this agent card (crypto feature)
+    #[cfg(feature = "crypto")]
+    pub fn add_receipt(&mut self, receipt: Receipt) {
+        if let Some(receipts) = &mut self.receipts {
+            receipts.push(receipt);
+        } else {
+            self.receipts = Some(vec![receipt]);
+        }
+    }
+
+    /// Get all receipts for this agent card (crypto feature)
+    #[cfg(feature = "crypto")]
+    pub fn receipts(&self) -> Option<&[Receipt]> {
+        self.receipts.as_deref()
+    }
+
+    /// Compute hash of this agent card for signing (crypto feature)
+    #[cfg(feature = "crypto")]
+    pub fn compute_hash(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let serialized = serde_json::to_vec(self).unwrap_or_default();
+        let mut hasher = Sha256::new();
+        hasher.update(&serialized);
+        hex::encode(hasher.finalize())
+    }
 }
 
 /// Authentication information for push notification endpoints.
@@ -534,6 +611,8 @@ mod tests {
             skills: Vec::new(),
             signatures: Some(vec![signature]),
             supports_authenticated_extended_card: Some(true),
+            #[cfg(feature = "crypto")]
+            receipts: None,
         };
 
         let json_value = serde_json::to_value(&card).unwrap();
@@ -607,6 +686,8 @@ mod tests {
             skills: Vec::new(),
             signatures: None,
             supports_authenticated_extended_card: None,
+            #[cfg(feature = "crypto")]
+            receipts: None,
         };
 
         let json_value = serde_json::to_value(&card).unwrap();
