@@ -397,12 +397,12 @@ mod tests {
         assert_eq!(status, HealthStatus::Healthy);
 
         // Update component to degraded
-        checker.update_component("cache".to_string(), HealthStatus::Degraded).await;
+        checker.update_component("cache", HealthStatus::Degraded).await;
         let status = checker.get_health_status().await;
         assert_eq!(status, HealthStatus::Degraded);
 
         // Update component to unhealthy
-        checker.update_component("database".to_string(), HealthStatus::Unhealthy).await;
+        checker.update_component("database", HealthStatus::Unhealthy).await;
         let status = checker.get_health_status().await;
         assert_eq!(status, HealthStatus::Unhealthy);
     }
@@ -424,7 +424,7 @@ mod tests {
 
         // Ready when healthy
         checker
-            .update_component("database".to_string(), HealthStatus::Healthy)
+            .update_component("database", HealthStatus::Healthy)
             .await;
         assert!(checker.is_ready(&critical).await);
     }

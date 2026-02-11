@@ -56,19 +56,19 @@ mod message_converter_tests {
             kind: "message".to_string(),
         };
 
-        let task = Task {
-            id: "task-1".to_string(),
-            context_id: "ctx-1".to_string(),
-            status: TaskStatus {
+        let task = a2a_rs::TaskBuilder::default()
+            .id("task-1".to_string())
+            .context_id("ctx-1".to_string())
+            .status(TaskStatus {
                 state: TaskState::Completed,
                 message: None,
                 timestamp: Some(chrono::Utc::now()),
-            },
-            artifacts: None,
-            history: Some(vec![user_message, agent_message]),
-            metadata: None,
-            kind: "task".to_string(),
-        };
+            })
+            .artifacts(None)
+            .history(Some(vec![user_message, agent_message]))
+            .metadata(None)
+            .kind("task".to_string())
+            .build();
 
         let extracted = converter.extract_agent_message(&task).unwrap();
         assert_eq!(extracted.role, Role::Agent);
@@ -109,19 +109,19 @@ mod message_converter_tests {
             kind: "message".to_string(),
         };
 
-        let task = Task {
-            id: "task-1".to_string(),
-            context_id: "ctx-1".to_string(),
-            status: TaskStatus {
+        let task = a2a_rs::TaskBuilder::default()
+            .id("task-1".to_string())
+            .context_id("ctx-1".to_string())
+            .status(TaskStatus {
                 state: TaskState::Completed,
                 message: None,
                 timestamp: Some(chrono::Utc::now()),
-            },
-            artifacts: None,
-            history: Some(vec![user_message, agent_message]),
-            metadata: None,
-            kind: "task".to_string(),
-        };
+            })
+            .artifacts(None)
+            .history(Some(vec![user_message, agent_message]))
+            .metadata(None)
+            .kind("task".to_string())
+            .build();
 
         let extracted = converter.extract_user_message(&task).unwrap();
         assert_eq!(extracted.role, Role::User);

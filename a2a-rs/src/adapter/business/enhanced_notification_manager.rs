@@ -7,14 +7,15 @@ use async_trait::async_trait;
 use tokio::sync::Mutex;
 
 use crate::domain::{
-    A2AError, PushNotificationConfig, TaskArtifactUpdateEvent, TaskIdParams,
+    A2AError, PushNotificationConfig, TaskArtifactUpdateEvent,
     TaskPushNotificationConfig, TaskStatusUpdateEvent,
 };
 use crate::port::AsyncNotificationManager;
+use crate::adapter::business::push_notification::PushNotificationSender;
 
 #[cfg(feature = "http-client")]
 use crate::adapter::business::push_notification_enhanced::{
-    EnhancedHttpPushNotificationSender, HttpPushNotificationConfig, InMemoryDeadLetterQueue,
+    HttpPushNotificationConfig, InMemoryDeadLetterQueue,
     InMemoryDeliveryTracker,
 };
 
@@ -127,16 +128,20 @@ impl AsyncNotificationManager for EnhancedNotificationManager {
             );
 
             #[cfg(feature = "http-client")]
-            if let Some(sender) = &self.sender {
-                return sender
-                    .send_status_update(&task_config.push_notification_config, status_update)
-                    .await;
+            {
+                if let Some(sender) = &self.sender {
+                    return sender
+                        .send_status_update(&task_config.push_notification_config, status_update)
+                        .await;
+                }
+                #[cfg(feature = "tracing")]
+                tracing::warn!("No HTTP sender available, notification not sent");
             }
 
             #[cfg(not(feature = "http-client"))]
             {
+                #[cfg(feature = "tracing")]
                 tracing::warn!("HTTP client not enabled, notification not sent");
-                Ok(())
             }
         } else {
             #[cfg(feature = "tracing")]
@@ -144,8 +149,8 @@ impl AsyncNotificationManager for EnhancedNotificationManager {
                 task_id = %task_id,
                 "No push notification config for task"
             );
-            Ok(())
         }
+        Ok(())
     }
 
     async fn notify_task_artifact_update<'a>(
@@ -168,19 +173,25 @@ impl AsyncNotificationManager for EnhancedNotificationManager {
             );
 
             #[cfg(feature = "http-client")]
-            if let Some(sender) = &self.sender {
-                return sender
-                    .send_artifact_update(
-                        &task_config.push_notification_config,
-                        artifact_update,
-                    )
-                    .await;
+            {
+                if let Some(sender) = &self.sender {
+                    return sender
+                        .send_artifact_update(
+                            &task_config.push_notification_config,
+                            artifact_update,
+                        )
+                        .await;
+                }
+                #[cfg(feature = "tracing")]
+                tracing::warn!("No HTTP sender available, notification not sent");
+                return Ok(());
             }
 
             #[cfg(not(feature = "http-client"))]
             {
+                #[cfg(feature = "tracing")]
                 tracing::warn!("HTTP client not enabled, notification not sent");
-                Ok(())
+                return Ok(());
             }
         } else {
             #[cfg(feature = "tracing")]
@@ -239,16 +250,6 @@ impl EnhancedHttpNotificationSender {
         event: &TaskArtifactUpdateEvent,
     ) -> Result<(), A2AError> {
         self.sender.send_artifact_update(config, event).await
-    }
-
-    /// Get a reference to the tracker
-    pub fn tracker(&self) -> Arc<InMemoryDeliveryTracker> {
-        self.sender.tracker()
-    }
-
-    /// Get a reference to the dead letter queue
-    pub fn dead_letter_queue(&self) -> Arc<InMemoryDeadLetterQueue> {
-        self.sender.dead_letter_queue()
     }
 }
 

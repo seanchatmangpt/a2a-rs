@@ -139,6 +139,6 @@ pub use services::{EnhancedHttpClient, BatchClientOperations};
 
 #[cfg(feature = "client")]
 pub use services::{
-    A2AClientConfig, AsyncA2AClient, BatchConfig, EnhancedHttpClient, PoolConfig,
+    A2AClientConfig, AsyncA2AClient, BatchConfig, PoolConfig,
     RetryConfig, StreamItem, TokenInfo, TokenRefreshConfig,
 };

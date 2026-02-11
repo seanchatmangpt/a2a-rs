@@ -222,8 +222,11 @@ impl InMemoryDeliveryTracker {
                 tracking.delivered_at = Some(now);
                 tracking.last_error = None;
             }
-            DeliveryStatus::Failed { error, .. } | DeliveryStatus::DeadLettered { .. } => {
+            DeliveryStatus::Failed { error, .. } => {
                 tracking.last_error = Some(error);
+            }
+            DeliveryStatus::DeadLettered { reason, .. } => {
+                tracking.last_error = Some(reason);
             }
             _ => {}
         }
@@ -310,17 +313,24 @@ pub struct HttpPushNotificationConfig {
     enable_dead_letter: bool,
 
     /// HMAC secret key for webhook signature (optional)
-    #[builder(default = None)]
     signing_key: Option<String>,
 
     /// Signature header name (default: X-Webhook-Signature)
-    #[builder(default = Some("X-Webhook-Signature".to_string()))]
     signature_header: Option<String>,
 }
 
 impl Default for HttpPushNotificationConfig {
     fn default() -> Self {
-        Self::builder().build()
+        Self {
+            timeout: 30,
+            max_retries: 3,
+            backoff_ms: 1000,
+            enable_deduplication: true,
+            enable_tracking: true,
+            enable_dead_letter: true,
+            signing_key: None,
+            signature_header: Some("X-Webhook-Signature".to_string()),
+        }
     }
 }
 
@@ -393,17 +403,18 @@ impl EnhancedHttpPushNotificationSender {
 
         // Add webhook signature if configured
         #[cfg(feature = "crypto")]
-        if let Some(key) = &self.config.signing_key {
+        if self.config.signing_key.is_some() {
             if let Ok(signature) = self.generate_signature(payload) {
-                let header_name = self
+                let header_name_str = self
                     .config
                     .signature_header
-                    .as_ref()
-                    .map(|s| s.as_str())
+                    .as_deref()
                     .unwrap_or("X-Webhook-Signature");
 
-                if let Ok(header_value) = HeaderValue::from_str(&format!("sha256={}", signature)) {
-                    headers.insert(header_name, header_value);
+                if let Ok(header_name) = reqwest::header::HeaderName::from_bytes(header_name_str.as_bytes()) {
+                    if let Ok(header_value) = HeaderValue::from_str(&format!("sha256={}", signature)) {
+                        headers.insert(header_name, header_value);
+                    }
                 }
             }
         }
@@ -703,7 +714,7 @@ mod tests {
             .timeout(60)
             .max_retries(5)
             .backoff_ms(2000)
-            .signing_key(Some("test-secret".to_string()))
+            .signing_key("test-secret".to_string())
             .build();
 
         assert_eq!(config.timeout, 60);
@@ -777,7 +788,7 @@ mod tests {
     #[test]
     fn test_signature_generation() {
         let config = HttpPushNotificationConfig::builder()
-            .signing_key(Some("test-secret-key".to_string()))
+            .signing_key("test-secret-key".to_string())
             .build();
 
         let sender = EnhancedHttpPushNotificationSender::with_config(config);
@@ -795,7 +806,7 @@ mod tests {
     #[test]
     fn test_signature_different_payloads() {
         let config = HttpPushNotificationConfig::builder()
-            .signing_key(Some("test-secret-key".to_string()))
+            .signing_key("test-secret-key".to_string())
             .build();
 
         let sender = EnhancedHttpPushNotificationSender::with_config(config);

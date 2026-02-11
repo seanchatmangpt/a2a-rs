@@ -136,7 +136,7 @@ pub struct AndonSignal {
 }
 
 /// Jidoka gate - stops pipeline on abnormality detection
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct JidokaGate {
     /// Whether the gate is currently halting the pipeline
@@ -154,17 +154,6 @@ pub struct JidokaGate {
     pub blocked_count: usize,
 }
 
-impl Default for JidokaGate {
-    fn default() -> Self {
-        Self {
-            is_halted: false,
-            halt_reason: None,
-            halted_at: None,
-            blocked_count: 0,
-        }
-    }
-}
-
 /// Task entry in the queue with timing metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -177,6 +166,7 @@ struct QueuedTask {
 
     /// When task entered the queue (not serialized)
     #[serde(skip, default = "Instant::now")]
+    #[allow(dead_code)]
     queued_at: Instant,
 
     /// Priority level (higher = more urgent)
@@ -456,6 +446,7 @@ struct CoordinatorState {
     heijunka: HeijunkaScheduler,
 
     /// Takt time calculator
+    #[allow(dead_code)]
     takt_time: TaktTime,
 
     /// Accumulated metrics
@@ -467,6 +458,7 @@ struct CoordinatorState {
 
 #[derive(Debug, Clone)]
 struct TaskTiming {
+    #[allow(dead_code)]
     queued_at: Instant,
     started_at: Option<Instant>,
     completed_at: Option<Instant>,
@@ -505,8 +497,10 @@ impl CoordinatorState {
             config.heijunka_target_throughput,
         );
 
-        let mut metrics = CoordinatorMetrics::default();
-        metrics.station_metrics = station_metrics;
+        let metrics = CoordinatorMetrics {
+            station_metrics,
+            ..CoordinatorMetrics::default()
+        };
 
         Self {
             station_queues,

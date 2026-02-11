@@ -24,8 +24,6 @@ pub use client::{
     PoolConfig, RetryConfig, StreamItem, TokenInfo, TokenRefreshConfig,
 };
 
-#[cfg(feature = "client")]
-pub use client::{StreamItem};
 
 #[cfg(feature = "server")]
 pub use coordinator::{

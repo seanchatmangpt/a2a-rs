@@ -68,6 +68,7 @@ impl<C: AsyncAdmissionController + 'static> FirewallService<C> {
     }
 
     /// Process a single admission request
+    #[allow(dead_code)]
     async fn process_admission_request(controller: &C, request: AdmissionRequest) {
         let result = controller.request_admission(request.work_packet).await;
 

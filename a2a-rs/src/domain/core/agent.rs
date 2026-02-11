@@ -5,9 +5,6 @@ use std::collections::HashMap;
 #[cfg(feature = "crypto")]
 use crate::services::Receipt;
 
-#[cfg(feature = "crypto")]
-use sha2::Sha256;
-
 /// Supported A2A transport protocols (v0.3.0).
 ///
 /// Defines the transport protocols that agents can use for communication.

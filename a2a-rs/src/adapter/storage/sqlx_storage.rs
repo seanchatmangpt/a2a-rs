@@ -264,6 +264,8 @@ impl SqlxTaskStorage {
             metadata,
             artifacts,
             kind: "task".to_string(),
+            #[cfg(feature = "crypto")]
+            receipts: None,
         };
 
         Ok(task)

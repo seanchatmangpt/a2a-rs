@@ -30,9 +30,10 @@ pub enum JidokaMode {
     Red,
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for JidokaMode {
     fn default() -> Self {
-        JidokaMode::Green
+        Self::Green
     }
 }
 

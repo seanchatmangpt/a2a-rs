@@ -18,11 +18,8 @@ use std::{
 };
 use tokio::sync::{Mutex, Semaphore};
 
-#[cfg(feature = "http-client")]
-use reqwest::Client as ReqwestClient;
-
 #[cfg(feature = "tracing")]
-use tracing::{debug, info, warn, instrument};
+use tracing::{info, warn, instrument};
 
 use crate::{
     application::{JSONRPCResponse, json_rpc::A2ARequest},
@@ -33,10 +30,7 @@ use crate::{
 };
 
 #[cfg(feature = "http-client")]
-use crate::adapter::transport::HttpClient;
-
-#[cfg(feature = "ws-client")]
-use crate::adapter::transport::WebSocketClient;
+use crate::adapter::HttpClient;
 
 /// Items that can be streamed from the server during task subscriptions.
 ///
@@ -247,7 +241,9 @@ impl TokenInfo {
         match self.expires_at {
             Some(expires_at) => {
                 let now = Instant::now();
-                let refresh_time = expires_at.saturating_duration_since(config.refresh_before_expiry);
+                // Check if we're within the refresh window
+                // We need to refresh if the current time is past (expires_at - refresh_before_expiry)
+                let refresh_time = expires_at.checked_sub(config.refresh_before_expiry).unwrap_or(expires_at);
                 now >= refresh_time
             }
             None => false,
@@ -276,23 +272,18 @@ pub struct A2AClientConfig {
     pub base_url: String,
 
     /// Authentication token (if required)
-    #[builder(default)]
     pub auth_token: Option<String>,
 
     /// Retry configuration
-    #[builder(default)]
     pub retry_config: Option<RetryConfig>,
 
     /// Connection pool configuration
-    #[builder(default)]
     pub pool_config: Option<PoolConfig>,
 
     /// Token refresh configuration
-    #[builder(default)]
     pub token_refresh_config: Option<TokenRefreshConfig>,
 
     /// Batch configuration
-    #[builder(default)]
     pub batch_config: Option<BatchConfig>,
 
     /// Request timeout (default: 30s)
@@ -479,9 +470,10 @@ impl EnhancedHttpClient {
     }
 
     /// Execute an operation with retry logic
-    async fn execute_with_retry<F, T>(&self, operation: F) -> Result<T, A2AError>
+    async fn execute_with_retry<T, Fut, F>(&self, operation: F) -> Result<T, A2AError>
     where
-        F: Fn() -> Pin<Box<dyn Future<Output = Result<T, A2AError>> + Send>> + Send + Sync,
+        F: Fn() -> Fut,
+        Fut: Future<Output = Result<T, A2AError>> + Send,
     {
         let retry_config = self.config.retry_config.clone().unwrap_or_default();
 
@@ -531,55 +523,12 @@ impl EnhancedHttpClient {
             "Operation failed after all retry attempts".to_string(),
         ))
     }
-
-    /// Check if an error is retryable
     fn is_retryable_error(&self, error: &A2AError) -> bool {
         match error {
             A2AError::Internal(msg) if msg.contains("timeout") => true,
             A2AError::Internal(msg) if msg.contains("connection") => true,
             A2AError::Io(_) => true,
             _ => false,
-        }
-    }
-
-    /// Execute a batch of operations concurrently
-    pub async fn batch_execute<F, T, E>(
-        &self,
-        operations: Vec<F>,
-    ) -> Vec<Result<T, A2AError>>
-    where
-        F: FnOnce() -> Pin<Box<dyn Future<Output = Result<T, A2AError>> + Send>> + Send + Sync,
-        T: Send,
-    {
-        let batch_config = self.config.batch_config.clone().unwrap_or_default();
-
-        if !batch_config.enabled || operations.len() <= batch_config.max_batch_size {
-            // Execute all concurrently
-            let futures: Vec<_> = operations.into_iter().map(|op| op()).collect();
-            futures::future::join_all(futures).await
-        } else {
-            // Split into batches
-            let mut results = Vec::new();
-            let mut batch = Vec::new();
-            let mut remaining = operations;
-
-            while !remaining.is_empty() {
-                batch.clear();
-                while batch.len() < batch_config.max_batch_size && !remaining.is_empty() {
-                    batch.push(remaining.remove(0));
-                }
-
-                let futures: Vec<_> = batch.drain(..).map(|op| op()).collect();
-                let batch_results = futures::future::join_all(futures).await;
-                results.extend(batch_results);
-
-                // Add small delay between batches if more remain
-                if !remaining.is_empty() {
-                    tokio::time::sleep(Duration::from_millis(50)).await;
-                }
-            }
-
-            results
         }
     }
 }
@@ -589,16 +538,18 @@ impl EnhancedHttpClient {
 impl AsyncA2AClient for EnhancedHttpClient {
     #[cfg_attr(feature = "tracing", instrument(skip(self, request)))]
     async fn send_raw_request<'a>(&self, request: &'a str) -> Result<String, A2AError> {
-        self.execute_with_retry(|| {
-            Box::pin(async move { self.http_client.send_raw_request(request).await })
+        let request = request.to_owned();
+        self.execute_with_retry(|| async {
+            self.http_client.send_raw_request(&request).await
         })
         .await
     }
 
     #[cfg_attr(feature = "tracing", instrument(skip(self, request)))]
     async fn send_request<'a>(&self, request: &'a A2ARequest) -> Result<JSONRPCResponse, A2AError> {
-        self.execute_with_retry(|| {
-            Box::pin(async move { self.http_client.send_request(request).await })
+        let request = request.clone();
+        self.execute_with_retry(|| async {
+            self.http_client.send_request(&request).await
         })
         .await
     }
@@ -610,12 +561,13 @@ impl AsyncA2AClient for EnhancedHttpClient {
         session_id: Option<&'a str>,
         history_length: Option<u32>,
     ) -> Result<Task, A2AError> {
-        self.execute_with_retry(|| {
-            Box::pin(async move {
-                self.http_client
-                    .send_task_message(task_id, message, session_id, history_length)
-                    .await
-            })
+        let task_id = task_id.to_owned();
+        let message = message.clone();
+        let session_id = session_id.map(|s| (*s).to_owned());
+        self.execute_with_retry(|| async {
+            self.http_client
+                .send_task_message(&task_id, &message, session_id.as_deref(), history_length)
+                .await
         })
         .await
     }
@@ -625,15 +577,17 @@ impl AsyncA2AClient for EnhancedHttpClient {
         task_id: &'a str,
         history_length: Option<u32>,
     ) -> Result<Task, A2AError> {
-        self.execute_with_retry(|| {
-            Box::pin(async move { self.http_client.get_task(task_id, history_length).await })
+        let task_id = task_id.to_owned();
+        self.execute_with_retry(|| async {
+            self.http_client.get_task(&task_id, history_length).await
         })
         .await
     }
 
     async fn cancel_task<'a>(&self, task_id: &'a str) -> Result<Task, A2AError> {
-        self.execute_with_retry(|| {
-            Box::pin(async move { self.http_client.cancel_task(task_id).await })
+        let task_id = task_id.to_owned();
+        self.execute_with_retry(|| async {
+            self.http_client.cancel_task(&task_id).await
         })
         .await
     }
@@ -642,8 +596,9 @@ impl AsyncA2AClient for EnhancedHttpClient {
         &self,
         config: &'a TaskPushNotificationConfig,
     ) -> Result<TaskPushNotificationConfig, A2AError> {
-        self.execute_with_retry(|| {
-            Box::pin(async move { self.http_client.set_task_push_notification(config).await })
+        let config = config.clone();
+        self.execute_with_retry(|| async {
+            self.http_client.set_task_push_notification(&config).await
         })
         .await
     }
@@ -652,8 +607,9 @@ impl AsyncA2AClient for EnhancedHttpClient {
         &self,
         task_id: &'a str,
     ) -> Result<TaskPushNotificationConfig, A2AError> {
-        self.execute_with_retry(|| {
-            Box::pin(async move { self.http_client.get_task_push_notification(task_id).await })
+        let task_id = task_id.to_owned();
+        self.execute_with_retry(|| async {
+            self.http_client.get_task_push_notification(&task_id).await
         })
         .await
     }
@@ -662,8 +618,9 @@ impl AsyncA2AClient for EnhancedHttpClient {
         &self,
         params: &'a ListTasksParams,
     ) -> Result<ListTasksResult, A2AError> {
-        self.execute_with_retry(|| {
-            Box::pin(async move { self.http_client.list_tasks(params).await })
+        let params = params.clone();
+        self.execute_with_retry(|| async {
+            self.http_client.list_tasks(&params).await
         })
         .await
     }
@@ -672,12 +629,9 @@ impl AsyncA2AClient for EnhancedHttpClient {
         &self,
         task_id: &'a str,
     ) -> Result<Vec<TaskPushNotificationConfig>, A2AError> {
-        self.execute_with_retry(|| {
-            Box::pin(async move {
-                self.http_client
-                    .list_push_notification_configs(task_id)
-                    .await
-            })
+        let task_id = task_id.to_owned();
+        self.execute_with_retry(|| async {
+            self.http_client.list_push_notification_configs(&task_id).await
         })
         .await
     }
@@ -687,12 +641,12 @@ impl AsyncA2AClient for EnhancedHttpClient {
         task_id: &'a str,
         config_id: &'a str,
     ) -> Result<TaskPushNotificationConfig, A2AError> {
-        self.execute_with_retry(|| {
-            Box::pin(async move {
-                self.http_client
-                    .get_push_notification_config(task_id, config_id)
-                    .await
-            })
+        let task_id = task_id.to_owned();
+        let config_id = config_id.to_owned();
+        self.execute_with_retry(|| async {
+            self.http_client
+                .get_push_notification_config(&task_id, &config_id)
+                .await
         })
         .await
     }
@@ -702,12 +656,12 @@ impl AsyncA2AClient for EnhancedHttpClient {
         task_id: &'a str,
         config_id: &'a str,
     ) -> Result<(), A2AError> {
-        self.execute_with_retry(|| {
-            Box::pin(async move {
-                self.http_client
-                    .delete_push_notification_config(task_id, config_id)
-                    .await
-            })
+        let task_id = task_id.to_owned();
+        let config_id = config_id.to_owned();
+        self.execute_with_retry(|| async {
+            self.http_client
+                .delete_push_notification_config(&task_id, &config_id)
+                .await
         })
         .await
     }
@@ -746,31 +700,21 @@ impl BatchClientOperations for EnhancedHttpClient {
         &self,
         task_ids: Vec<String>,
     ) -> Vec<Result<Task, A2AError>> {
-        let operations: Vec<_> = task_ids
-            .iter()
-            .map(|id| {
-                let id = id.clone();
-                Box::pin(async move { self.get_task(&id, None).await })
-                    as Pin<Box<dyn Future<Output = Result<Task, A2AError>> + Send>>
-            })
-            .collect();
-
-        self.batch_execute(operations).await
+        let mut results = Vec::new();
+        for id in &task_ids {
+            results.push(self.get_task(id, None).await);
+        }
+        results
     }
 
     async fn cancel_tasks_batch(
         &self,
         task_ids: Vec<String>,
     ) -> Vec<Result<Task, A2AError>> {
-        let operations: Vec<_> = task_ids
-            .iter()
-            .map(|id| {
-                let id = id.clone();
-                Box::pin(async move { self.cancel_task(&id).await })
-                    as Pin<Box<dyn Future<Output = Result<Task, A2AError>> + Send>>
-            })
-            .collect();
-
-        self.batch_execute(operations).await
+        let mut results = Vec::new();
+        for id in &task_ids {
+            results.push(self.cancel_task(id).await);
+        }
+        results
     }
 }

@@ -142,19 +142,19 @@ async fn handle_task_send(
     let mut tasks = state.tasks.lock().await;
     if !tasks.contains_key(&task_id) {
         let context_id = format!("{}-ctx", task_id);
-        let task = Task {
-            id: task_id.clone(),
-            context_id,
-            status: TaskStatus {
+        let task = a2a_rs::TaskBuilder::default()
+            .id(task_id.clone())
+            .context_id(context_id)
+            .status(TaskStatus {
                 state: TaskState::Submitted,
                 message: None,
                 timestamp: Some(chrono::Utc::now()),
-            },
-            artifacts: None,
-            history: Some(vec![message.clone()]),
-            metadata: None,
-            kind: "task".to_string(),
-        };
+            })
+            .artifacts(None)
+            .history(Some(vec![message.clone()]))
+            .metadata(None)
+            .kind("task".to_string())
+            .build();
         tasks.insert(task_id.clone(), task);
     } else {
         // Add message to existing task
@@ -215,19 +215,19 @@ async fn handle_task_send_subscribe(
     let mut tasks = state.tasks.lock().await;
     if !tasks.contains_key(&task_id) {
         let context_id = format!("{}-ctx", task_id);
-        let task = Task {
-            id: task_id.clone(),
-            context_id,
-            status: TaskStatus {
+        let task = a2a_rs::TaskBuilder::default()
+            .id(task_id.clone())
+            .context_id(context_id)
+            .status(TaskStatus {
                 state: TaskState::Submitted,
                 message: None,
                 timestamp: Some(chrono::Utc::now()),
-            },
-            artifacts: None,
-            history: Some(vec![message.clone()]),
-            metadata: None,
-            kind: "task".to_string(),
-        };
+            })
+            .artifacts(None)
+            .history(Some(vec![message.clone()]))
+            .metadata(None)
+            .kind("task".to_string())
+            .build();
         tasks.insert(task_id.clone(), task.clone());
 
         // Publish initial task state to SSE stream

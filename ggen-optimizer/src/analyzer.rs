@@ -154,6 +154,7 @@ impl Analyzer {
     }
 
     /// Recursively extract triple patterns.
+    #[allow(clippy::only_used_in_recursion)]
     fn extract_patterns_recursive(&self, pattern: &GraphPattern, result: &mut Vec<TriplePattern>) {
         match pattern {
             GraphPattern::Basic(patterns) => result.extend(patterns.clone()),

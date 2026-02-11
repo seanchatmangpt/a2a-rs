@@ -4,7 +4,7 @@
 //! including all JSON-RPC methods, authentication schemes, and data models.
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value, Map};
+use serde_json::{json, Value};
 
 /// OpenAPI specification builder for A2A protocol
 #[derive(Debug, Clone)]

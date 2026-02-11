@@ -152,6 +152,7 @@ impl Optimizer {
     }
 
     /// Filter out redundant patterns from a graph pattern.
+    #[allow(clippy::only_used_in_recursion)]
     fn filter_redundant_in_pattern(
         &self,
         pattern: &GraphPattern,
@@ -288,6 +289,7 @@ impl Optimizer {
     }
 
     /// Collect variables from filter expression.
+    #[allow(clippy::only_used_in_recursion)]
     fn collect_filter_vars(&self, expr: &FilterExpr, vars: &mut Vec<String>) {
         match expr {
             FilterExpr::Var(v) => vars.push(v.name.clone()),
@@ -382,6 +384,7 @@ impl Optimizer {
     }
 
     /// Flatten a graph pattern.
+    #[allow(clippy::only_used_in_recursion)]
     fn flatten_pattern(&self, pattern: &GraphPattern) -> GraphPattern {
         match pattern {
             GraphPattern::Group(patterns) => {

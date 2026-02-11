@@ -233,19 +233,17 @@ impl CloudStorageReceiptStorage {
     async fn download_from_gcs(&self, object_path: &str) -> Result<Vec<u8>, ReceiptError> {
         // Simulate GCS download by reading from memory
         let storage = self.receipts.read().await;
-        storage
-            .get(object_path)
-            .cloned()
-            .ok_or_else(|| {
-                ReceiptError::InvalidFormat(format!("Receipt not found at gs://{}/{}", self.config.bucket, object_path))
-            })
+        storage.get(object_path).cloned().ok_or_else(|| {
+            ReceiptError::InvalidFormat(format!(
+                "Receipt not found at gs://{}/{}",
+                self.config.bucket, object_path
+            ))
+        })
     }
-
 }
 
 #[cfg(feature = "storage")]
 #[async_trait]
-
 #[cfg(feature = "storage")]
 #[async_trait]
 impl ReceiptStorage for CloudStorageReceiptStorage {
@@ -284,8 +282,9 @@ impl ReceiptStorage for CloudStorageReceiptStorage {
         let json_bytes = self.download_from_gcs(&object_path).await?;
 
         // Deserialize JSON to Receipt
-        let receipt: Receipt = serde_json::from_slice(&json_bytes)
-            .map_err(|e| ReceiptError::SerializationError(format!("Failed to deserialize receipt: {}", e)))?;
+        let receipt: Receipt = serde_json::from_slice(&json_bytes).map_err(|e| {
+            ReceiptError::SerializationError(format!("Failed to deserialize receipt: {}", e))
+        })?;
 
         Ok(receipt)
     }
@@ -297,9 +296,7 @@ impl ReceiptStorage for CloudStorageReceiptStorage {
         // Query the in-memory index for receipt IDs
         let receipt_ids = {
             let op_index = self.operation_index.read().await;
-            op_index.get(&operation_id)
-                .cloned()
-                .unwrap_or_default()
+            op_index.get(&operation_id).cloned().unwrap_or_default()
         };
 
         // Download each receipt

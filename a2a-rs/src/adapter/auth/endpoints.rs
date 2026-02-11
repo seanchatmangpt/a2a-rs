@@ -13,11 +13,11 @@ use axum::{
 #[cfg(feature = "http-server")]
 use crate::{
     adapter::auth::token_service::{
-        TokenRefreshRequest, TokenRequest, TokenResponse, UserInfo,
-        AuthorizationUrlGenerator, AuthorizationUrlResponse
+        TokenRefreshRequest, TokenRequest, UserInfo,
+        AuthorizationUrlGenerator
     },
     domain::A2AError,
-    port::authenticator::{AuthContext, AuthPrincipal, Authenticator},
+    port::authenticator::AuthPrincipal,
 };
 
 #[cfg(feature = "http-server")]
