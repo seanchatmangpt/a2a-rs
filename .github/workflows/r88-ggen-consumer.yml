@@ -1,6 +1,9 @@
 name: R88 GGEN a2a-rs Consumer
 
 on:
+  push:
+    branches:
+      - "fanout/r88-ggen-optimizer-contract"
   pull_request:
     paths:
       - "ggen.toml"
