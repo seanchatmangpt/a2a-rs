@@ -2,7 +2,7 @@
 
 Generated from `ontology/ggen-optimizer-capabilities.ttl`.
 
-{% for row in rows %}
+{% for row in results %}
 ## {{ row.label }}
 
 - **Crate:** `{{ row.crate }}`
