@@ -1,0 +1,15 @@
+# a2a-rs GGEN Optimizer Capabilities
+
+Generated from `ontology/ggen-optimizer-capabilities.ttl`.
+
+{% for row in results %}
+## {{ row.label }}
+
+- **Crate:** `{{ row.crate }}`
+- **Algorithm surface:** {{ row.algorithm_surface }}
+- **Authority:** {{ row.authority }}
+- **Meaning:** {{ row.description }}
+
+{% endfor %}
+
+Generated output is a projection. Edit the ontology or template, not the generated reference.

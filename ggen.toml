@@ -1,0 +1,65 @@
+[project]
+name = "a2a-rs"
+version = "26.8.26"
+description = "GGEN manufacturing contract for the a2a-rs ggen-optimizer capability surface"
+
+[ontology]
+source = "ontology/ggen-optimizer-capabilities.ttl"
+base_iri = "https://a2a-rs.dev/ontology/ggen-optimizer#"
+
+[ontology.prefixes]
+a2a = "https://a2a-rs.dev/ontology/ggen-optimizer#"
+skos = "http://www.w3.org/2004/02/skos/core#"
+dcterms = "http://purl.org/dc/terms/"
+prov = "http://www.w3.org/ns/prov#"
+
+[inference]
+
+[[inference.rules]]
+name = "optimizer-capability-projection"
+construct = """
+PREFIX a2a: <https://a2a-rs.dev/ontology/ggen-optimizer#>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+CONSTRUCT {
+  ?cap a skos:Concept ;
+       skos:prefLabel ?label ;
+       dcterms:description ?description ;
+       a2a:crate ?crate ;
+       a2a:algorithmSurface ?algorithm_surface ;
+       a2a:authority ?authority .
+}
+WHERE {
+  ?cap a skos:Concept ;
+       skos:prefLabel ?label ;
+       dcterms:description ?description ;
+       a2a:crate ?crate ;
+       a2a:algorithmSurface ?algorithm_surface ;
+       a2a:authority ?authority .
+}
+ORDER BY ?label
+"""
+
+[generation]
+output_dir = "."
+
+[[generation.rules]]
+name = "ggen-optimizer-capabilities-reference"
+query = { inline = """
+PREFIX a2a: <https://a2a-rs.dev/ontology/ggen-optimizer#>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+SELECT ?label ?description ?crate ?algorithm_surface ?authority
+WHERE {
+  ?cap a skos:Concept ;
+       skos:prefLabel ?label ;
+       dcterms:description ?description ;
+       a2a:crate ?crate ;
+       a2a:algorithmSurface ?algorithm_surface ;
+       a2a:authority ?authority .
+}
+ORDER BY ?label
+""" }
+template = { file = "templates/ggen-optimizer-capabilities.md.tera" }
+output_file = "docs/reference/ggen-optimizer-capabilities.md"
+mode = "Overwrite"

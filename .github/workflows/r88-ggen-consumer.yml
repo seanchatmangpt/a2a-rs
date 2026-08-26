@@ -1,0 +1,60 @@
+name: R88 GGEN a2a-rs Consumer
+
+on:
+  push:
+    branches:
+      - "fanout/r88-ggen-optimizer-contract"
+  pull_request:
+    paths:
+      - "ggen.toml"
+      - "ontology/ggen-optimizer-capabilities.ttl"
+      - "templates/ggen-optimizer-capabilities.md.tera"
+      - ".github/workflows/r88-ggen-consumer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  manufacture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact consumer subject
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SUBJECT_SHA }}
+          persist-credentials: false
+
+      - name: Admit exact consumer and optimizer source
+        run: |
+          test "$(git rev-parse HEAD)" = "${SUBJECT_SHA}"
+          test -s ggen-optimizer/Cargo.toml
+          grep -q 'name = "ggen-optimizer"' ggen-optimizer/Cargo.toml
+          grep -q 'SPARQL CONSTRUCT query optimizer' ggen-optimizer/Cargo.toml
+
+      - name: Resolve exact GGEN producer
+        run: |
+          git clone --filter=blob:none https://github.com/seanchatmangpt/ggen.git "$RUNNER_TEMP/ggen"
+          git -C "$RUNNER_TEMP/ggen" checkout --detach ddfa602bfbab57b7ed5150f61b0acac7a41e3020
+          test "$(git -C "$RUNNER_TEMP/ggen" rev-parse HEAD)" = "ddfa602bfbab57b7ed5150f61b0acac7a41e3020"
+
+      - name: Admit canonical GGEN Rust toolchain
+        run: rustup toolchain install nightly --profile minimal
+
+      - name: Manufacture through canonical GGEN
+        run: cargo +nightly run --manifest-path "$RUNNER_TEMP/ggen/Cargo.toml" -p ggen-cli-lib --bin ggen -- sync run
+
+      - name: Qualify generated consequence and receipt
+        run: |
+          test -s docs/reference/ggen-optimizer-capabilities.md
+          grep -q 'SPARQL CONSTRUCT optimizer' docs/reference/ggen-optimizer-capabilities.md
+          grep -q 'Optimizer property-test surface' docs/reference/ggen-optimizer-capabilities.md
+          test -s .ggen-v2/receipt.json
+
+      - name: Preserve non-actuating authority
+        run: |
+          grep -Eq '(CONSTRUCT_ONLY|VERIFY_ONLY)' ontology/ggen-optimizer-capabilities.ttl
+          ! grep -R --line-number -E '(deploy|release|publish|kubectl|terraform apply)' ggen.toml ontology/ggen-optimizer-capabilities.ttl templates/ggen-optimizer-capabilities.md.tera
