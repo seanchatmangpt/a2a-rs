@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.org/castle/schemas/prepared-economic-effect/v1",
+  "title": "PreparedEconomicEffect v1",
+  "description": "CASTLE operational extension (not native FIBO). Non-authoritative example.org namespace. effect_id is derived from the identity fields; any change to them changes effect_id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "effect_id", "obligation_id", "principal_id", "payer_role", "beneficiary_id",
+    "beneficiary_account_identity", "monetary_amount", "currency_or_asset", "purpose",
+    "authority_grant_id", "authority_digest", "policy_profile_id", "law_state_digest",
+    "counterparty_evidence_digest", "funding_source_id", "resource_reservation_id",
+    "rail_profile_id", "message_profile_version", "idempotency_key", "created_at",
+    "expires_at", "nonce", "parent_receipt", "canonical_payload_digest"
+  ],
+  "properties": {
+    "effect_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "obligation_id": {"type": "string", "minLength": 1},
+    "principal_id": {"type": "string", "minLength": 1},
+    "payer_role": {"type": "string", "minLength": 1},
+    "beneficiary_id": {"type": "string", "minLength": 1},
+    "beneficiary_account_identity": {"type": "string", "minLength": 1},
+    "monetary_amount": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$"},
+    "currency_or_asset": {"type": "string", "minLength": 1},
+    "purpose": {"type": "string", "minLength": 1},
+    "authority_grant_id": {"type": "string", "minLength": 1},
+    "authority_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "policy_profile_id": {"type": "string", "minLength": 1},
+    "law_state_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "counterparty_evidence_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "funding_source_id": {"type": "string", "minLength": 1},
+    "resource_reservation_id": {"type": "string", "minLength": 1},
+    "rail_profile_id": {"type": "string", "minLength": 1},
+    "message_profile_version": {"type": "string", "minLength": 1},
+    "idempotency_key": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "nonce": {"type": "string", "minLength": 1},
+    "parent_receipt": {"type": ["string", "null"]},
+    "canonical_payload_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

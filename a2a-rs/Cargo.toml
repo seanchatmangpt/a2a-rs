@@ -69,6 +69,7 @@ jsonschema = "0.22"
 criterion = { version = "0.5", features = ["html_reports"] }
 arbitrary = { version = "1.3", features = ["derive"] }
 rand = "0.8"
+sha2 = "0.10"
 
 # Runtime dependencies for examples
 tokio = { version = "1.32", features = ["rt", "rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
