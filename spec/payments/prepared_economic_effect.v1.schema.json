@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://example.org/castle/schemas/prepared-economic-effect/v1",
   "title": "PreparedEconomicEffect v1",
-  "description": "CASTLE operational extension (not native FIBO). Non-authoritative example.org namespace. effect_id is derived from the identity fields; any change to them changes effect_id.",
+  "description": "CASTLE operational extension (not native FIBO). Non-authoritative example.org namespace. effect_id is derived (sha256 of canonical JSON) from the identity fields; JSON Schema cannot compute hashes, so the effect_id-to-fields check is performed by the reference validator in a2a-rs/tests/payments_support, not by this schema. date-time formats are enforced only by validators run with format validation on.",
   "type": "object",
   "additionalProperties": false,
   "required": [
