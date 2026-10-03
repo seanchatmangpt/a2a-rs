@@ -19,6 +19,7 @@ thiserror = "2.0"
 # Async runtime and utilities
 tokio = { version = "1.43", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
+tokio-util = { version = "0.7" }
 futures = "0.3"
 async-trait = "0.1"
 
@@ -31,8 +32,11 @@ uuid = { version = "1.11", features = ["v4", "serde"] }
 tracing = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 
-# A2A protocol
-a2a-rs = { path = "../a2a-rs" }
+# A2A protocol — crypto kept on unconditionally so Task/AgentCard struct literals
+# in this crate stay exhaustive regardless of workspace feature unification
+# (a2a-agents/osiris-*/tests request `full`, which pulls `crypto` into the
+# shared a2a-rs build and cfg-gates the `receipts` field on).
+a2a-rs = { path = "../a2a-rs", features = ["crypto"] }
 
 # HTTP client (for examples and tests)
 reqwest = { version = "0.12", features = ["json"], optional = true }

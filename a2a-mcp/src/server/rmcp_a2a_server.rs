@@ -27,9 +27,65 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
-// Placeholder for RMCP server handler
-// TODO: Integrate with actual rmcp::ServerHandler trait
-type RmcpHandler = Arc<dyn std::any::Any + Send + Sync>;
+/// Object-safe dispatcher trait wrapping [`rmcp::ServerHandler`].
+///
+/// [`rmcp::ServerHandler`] uses `impl Future` return types and is not object-safe.
+/// This trait exposes the single capability needed here — calling a named tool — via
+/// [`async_trait`], which boxes the returned future and makes the trait usable as
+/// `dyn RmcpToolDispatcher`.
+#[async_trait::async_trait]
+pub trait RmcpToolDispatcher: Send + Sync + 'static {
+    /// Invoke a tool by name with the given JSON arguments and return the result.
+    async fn dispatch_tool(
+        &self,
+        name: &str,
+        arguments: Option<serde_json::Map<String, serde_json::Value>>,
+    ) -> std::result::Result<rmcp::model::CallToolResult, rmcp::Error>;
+}
+
+/// Blanket implementation: any [`rmcp::ServerHandler`] becomes a [`RmcpToolDispatcher`].
+///
+/// We construct a stub [`rmcp::service::RequestContext`] backed by a disconnected
+/// channel.  The context's peer handle is never used in typical `ServerHandler`
+/// implementations that only inspect `CallToolRequestParam`, so no real transport
+/// is required.
+#[async_trait::async_trait]
+impl<H> RmcpToolDispatcher for H
+where
+    H: rmcp::ServerHandler + Clone + Send + Sync + 'static,
+{
+    async fn dispatch_tool(
+        &self,
+        name: &str,
+        arguments: Option<serde_json::Map<String, serde_json::Value>>,
+    ) -> std::result::Result<rmcp::model::CallToolResult, rmcp::Error> {
+        use rmcp::model::{CallToolRequestParam, ClientInfo};
+        use rmcp::service::{AtomicU32RequestIdProvider, Peer, RequestContext, RoleServer};
+        use std::borrow::Cow;
+        use std::sync::Arc;
+        use tokio_util::sync::CancellationToken;
+
+        let param = CallToolRequestParam {
+            name: Cow::Owned(name.to_string()),
+            arguments,
+        };
+
+        // Build a stub RequestContext so call_tool can be invoked without a live transport.
+        // The receiver half of the Peer channel is intentionally dropped; handlers that only
+        // inspect CallToolRequestParam will not use the peer handle.
+        let id_provider = Arc::new(AtomicU32RequestIdProvider::default());
+        let (peer, _rx) = Peer::<RoleServer>::new(id_provider, ClientInfo::default());
+        let context = RequestContext {
+            ct: CancellationToken::new(),
+            id: rmcp::model::RequestId::Number(0),
+            peer,
+        };
+
+        self.call_tool(param, context).await
+    }
+}
+
+type RmcpHandler = Arc<dyn RmcpToolDispatcher>;
 
 // Shared application state
 #[derive(Clone)]
@@ -65,8 +121,15 @@ struct TaskGetRequest {
 }
 
 impl RmcpA2aServer {
-    /// Create a new server that wraps an RMCP server
-    pub fn new<H: 'static + Send + Sync>(rmcp_handler: H, adapter: ToolToAgentAdapter) -> Self {
+    /// Create a new server that wraps an RMCP server handler.
+    ///
+    /// `rmcp_handler` must implement [`RmcpToolDispatcher`].  Any type that also
+    /// implements [`rmcp::ServerHandler`] satisfies this bound automatically via the
+    /// blanket implementation above.
+    pub fn new<H>(rmcp_handler: H, adapter: ToolToAgentAdapter) -> Self
+    where
+        H: RmcpToolDispatcher,
+    {
         let sse_manager = Arc::new(SseManager::new(SseManagerConfig::default()));
 
         Self {
@@ -77,12 +140,15 @@ impl RmcpA2aServer {
         }
     }
 
-    /// Create a new server with custom SSE configuration
-    pub fn new_with_sse_config<H: 'static + Send + Sync>(
+    /// Create a new server with custom SSE configuration.
+    pub fn new_with_sse_config<H>(
         rmcp_handler: H,
         adapter: ToolToAgentAdapter,
         sse_config: SseManagerConfig,
-    ) -> Self {
+    ) -> Self
+    where
+        H: RmcpToolDispatcher,
+    {
         let sse_manager = Arc::new(SseManager::new(sse_config));
 
         Self {
@@ -142,19 +208,20 @@ async fn handle_task_send(
     let mut tasks = state.tasks.lock().await;
     if !tasks.contains_key(&task_id) {
         let context_id = format!("{}-ctx", task_id);
-        let task = a2a_rs::TaskBuilder::default()
-            .id(task_id.clone())
-            .context_id(context_id)
-            .status(TaskStatus {
+        let task = Task {
+            id: task_id.clone(),
+            context_id,
+            status: TaskStatus {
                 state: TaskState::Submitted,
                 message: None,
                 timestamp: Some(chrono::Utc::now()),
-            })
-            .artifacts(None)
-            .history(Some(vec![message.clone()]))
-            .metadata(None)
-            .kind("task".to_string())
-            .build();
+            },
+            artifacts: None,
+            history: Some(vec![message.clone()]),
+            metadata: None,
+            kind: "task".to_string(),
+            receipts: None,
+        };
         tasks.insert(task_id.clone(), task);
     } else {
         // Add message to existing task
@@ -215,19 +282,20 @@ async fn handle_task_send_subscribe(
     let mut tasks = state.tasks.lock().await;
     if !tasks.contains_key(&task_id) {
         let context_id = format!("{}-ctx", task_id);
-        let task = a2a_rs::TaskBuilder::default()
-            .id(task_id.clone())
-            .context_id(context_id)
-            .status(TaskStatus {
+        let task = Task {
+            id: task_id.clone(),
+            context_id,
+            status: TaskStatus {
                 state: TaskState::Submitted,
                 message: None,
                 timestamp: Some(chrono::Utc::now()),
-            })
-            .artifacts(None)
-            .history(Some(vec![message.clone()]))
-            .metadata(None)
-            .kind("task".to_string())
-            .build();
+            },
+            artifacts: None,
+            history: Some(vec![message.clone()]),
+            metadata: None,
+            kind: "task".to_string(),
+            receipts: None,
+        };
         tasks.insert(task_id.clone(), task.clone());
 
         // Publish initial task state to SSE stream
@@ -328,16 +396,18 @@ async fn process_task(state: &AppState, task_id: &str) -> Result<()> {
         }
     }
 
-    // TODO: Call RMCP tool through proper handler interface
-    // For now, simulate a tool response
-    debug!("Would call RMCP tool: {} with params: {:?}", tool_name, params);
+    // Dispatch the tool call through the bound RMCP handler.
+    debug!("Calling RMCP tool: {} with params: {:?}", tool_name, params);
+    let arguments = params.as_object().cloned();
+    let call_result = state
+        .rmcp_handler
+        .dispatch_tool(&tool_name, arguments)
+        .await
+        .map_err(|e| Error::TaskProcessing(format!("RMCP tool '{}' error: {}", tool_name, e)))?;
 
-    // Simulate tool result
-    let tool_result = serde_json::json!({
-        "tool": tool_name,
-        "result": "Tool call simulation - RMCP integration pending",
-        "params": params,
-    });
+    // Serialise the CallToolResult into a plain JSON value for embedding in the A2A message.
+    let tool_result = serde_json::to_value(&call_result)
+        .unwrap_or_else(|_| serde_json::json!({"error": "failed to serialise tool result"}));
 
     // Create agent response message
     let agent_message = Message {
@@ -426,15 +496,17 @@ async fn process_task_with_streaming(state: &AppState, task_id: &str) -> Result<
         .sse_manager
         .publish(task_id, "task.status", tool_status_data)?;
 
-    // TODO: Call RMCP tool through proper handler interface
-    debug!("Would call RMCP tool: {} with params: {:?}", tool_name, params);
+    // Dispatch the tool call through the bound RMCP handler.
+    debug!("Calling RMCP tool: {} with params: {:?}", tool_name, params);
+    let arguments = params.as_object().cloned();
+    let call_result = state
+        .rmcp_handler
+        .dispatch_tool(&tool_name, arguments)
+        .await
+        .map_err(|e| Error::TaskProcessing(format!("RMCP tool '{}' error: {}", tool_name, e)))?;
 
-    // Simulate tool result
-    let tool_result = serde_json::json!({
-        "tool": tool_name,
-        "result": "Tool call simulation - RMCP integration pending",
-        "params": params,
-    });
+    let tool_result = serde_json::to_value(&call_result)
+        .unwrap_or_else(|_| serde_json::json!({"error": "failed to serialise tool result"}));
 
     // Publish tool response event
     let tool_response_data = serde_json::json!({

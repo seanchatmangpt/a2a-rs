@@ -101,20 +101,21 @@ impl AgentToToolAdapter {
             kind: "message".to_string(),
         };
 
-        // Create a task with the message using builder for feature-gated fields
-        Ok(a2a_rs::TaskBuilder::default()
-            .id(task_id)
-            .context_id(context_id)
-            .status(TaskStatus {
+        // Create a task with the message using struct literal syntax
+        Ok(Task {
+            id: task_id,
+            context_id,
+            status: TaskStatus {
                 state: TaskState::Submitted,
                 message: None,
                 timestamp: Some(chrono::Utc::now()),
-            })
-            .artifacts(None)
-            .history(Some(vec![message]))
-            .metadata(None)
-            .kind("task".to_string())
-            .build())
+            },
+            artifacts: None,
+            history: Some(vec![message]),
+            metadata: None,
+            kind: "task".to_string(),
+            receipts: None,
+        })
     }
 
     /// Parse tool method string in format "agent_url:method"

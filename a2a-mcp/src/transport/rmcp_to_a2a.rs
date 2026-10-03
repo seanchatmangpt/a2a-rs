@@ -20,20 +20,23 @@ impl RmcpToA2aTransport {
 
     /// Convert external request to A2A task
     pub async fn convert_request(&self, task_id: &str, message: Message) -> Result<Task> {
-        // Create a new task with the message using builder for feature-gated fields
-        Ok(a2a_rs::TaskBuilder::default()
-            .id(task_id.to_string())
-            .context_id(format!("{}-ctx", task_id))
-            .status(a2a_rs::TaskStatus {
+        // Create a new task with the message using struct literal syntax
+        // (a2a_rs::TaskBuilder no longer exists upstream; literals must stay
+        // exhaustive including the cfg(crypto) `receipts` field)
+        Ok(a2a_rs::Task {
+            id: task_id.to_string(),
+            context_id: format!("{}-ctx", task_id),
+            status: a2a_rs::TaskStatus {
                 state: a2a_rs::TaskState::Submitted,
                 message: None,
                 timestamp: Some(chrono::Utc::now()),
-            })
-            .artifacts(None)
-            .history(Some(vec![message]))
-            .metadata(None)
-            .kind("task".to_string())
-            .build())
+            },
+            artifacts: None,
+            history: Some(vec![message]),
+            metadata: None,
+            kind: "task".to_string(),
+            receipts: None,
+        })
     }
 
     /// Extract response data from task

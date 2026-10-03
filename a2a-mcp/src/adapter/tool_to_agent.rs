@@ -66,31 +66,32 @@ impl ToolToAgentAdapter {
             },
         );
 
-        a2a_rs::AgentCardBuilder::default()
-            .name(self.agent_name.clone())
-            .description(self.agent_description.clone())
-            .url("https://example.com/agent".to_string()) // Would be configured
-            .provider(None)
-            .version("1.0.0".to_string())
-            .protocol_version("0.3.0".to_string())
-            .preferred_transport("JSONRPC".to_string())
-            .additional_interfaces(None)
-            .icon_url(None)
-            .documentation_url(None)
-            .capabilities(a2a_rs::AgentCapabilities {
+        a2a_rs::AgentCard {
+            name: self.agent_name.clone(),
+            description: self.agent_description.clone(),
+            url: "https://example.com/agent".to_string(),
+            provider: None,
+            version: "1.0.0".to_string(),
+            protocol_version: "0.3.0".to_string(),
+            preferred_transport: "JSONRPC".to_string(),
+            additional_interfaces: None,
+            icon_url: None,
+            documentation_url: None,
+            capabilities: a2a_rs::AgentCapabilities {
                 streaming: true,
                 push_notifications: false,
                 state_transition_history: true,
                 extensions: None,
-            })
-            .security_schemes(Some(security_schemes))
-            .security(None)
-            .default_input_modes(vec!["text".to_string()])
-            .default_output_modes(vec!["text".to_string()])
-            .skills(skills)
-            .signatures(None)
-            .supports_authenticated_extended_card(None)
-            .build()
+            },
+            security_schemes: Some(security_schemes),
+            security: None,
+            default_input_modes: vec!["text".to_string()],
+            default_output_modes: vec!["text".to_string()],
+            skills,
+            signatures: None,
+            supports_authenticated_extended_card: None,
+            receipts: None,
+        }
     }
 
     /// Find a tool by name
